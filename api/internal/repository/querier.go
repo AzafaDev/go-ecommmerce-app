@@ -11,6 +11,10 @@ import (
 )
 
 type Querier interface {
+	AdminCountProducts(ctx context.Context, arg AdminCountProductsParams) (int64, error)
+	AdminGetDistinctCategories(ctx context.Context) ([]string, error)
+	AdminGetProductByID(ctx context.Context, id pgtype.UUID) (Product, error)
+	AdminListProducts(ctx context.Context, arg AdminListProductsParams) ([]Product, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
@@ -19,9 +23,9 @@ type Querier interface {
 	CreateVericationEmail(ctx context.Context, arg CreateVericationEmailParams) (EmailVerificationToken, error)
 	DeleteEmailVerificationByTokenHash(ctx context.Context, tokenHash string) error
 	DeletePasswordTokenByTokenHash(ctx context.Context, tokenHash string) error
+	GetDistinctCategories(ctx context.Context) ([]string, error)
 	GetEmailVerificationByTokenHash(ctx context.Context, tokenHash string) (EmailVerificationToken, error)
 	GetProductByID(ctx context.Context, id pgtype.UUID) (Product, error)
-	GetProductBySKU(ctx context.Context, sku string) (Product, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetRefreshTokenAnyStatus(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetResetPasswordTokenByTokenHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)

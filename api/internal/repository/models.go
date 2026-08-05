@@ -33,7 +33,7 @@ type Product struct {
 	Price       pgtype.Numeric
 	Stock       int32
 	Sku         string
-	Category    pgtype.Text
+	Category    string
 	IsActive    bool
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz

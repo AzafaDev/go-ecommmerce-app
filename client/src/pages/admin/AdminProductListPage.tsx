@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react'
 import { Field } from '../../components/Input'
 import { Badge } from '../../components/Badge'
 import { Pagination } from '../../components/Pagination'
-import { useProducts, useDeleteProduct } from '../../features/products/hooks'
+import { useAdminProducts, useDeleteProduct } from '../../features/products/hooks'
 import { formatIDR } from '../../features/products/format'
 
 export function AdminProductListPage() {
@@ -12,7 +12,7 @@ export function AdminProductListPage() {
   const search = searchParams.get('search') ?? ''
   const page = Number(searchParams.get('page') ?? '1')
 
-  const { data, isLoading } = useProducts({ search: search || undefined, page })
+  const { data, isLoading } = useAdminProducts({ search: search || undefined, page })
   const deleteProduct = useDeleteProduct()
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
 

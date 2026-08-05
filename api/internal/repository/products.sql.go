@@ -11,6 +11,139 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const adminCountProducts = `-- name: AdminCountProducts :one
+SELECT COUNT(*)
+FROM products
+WHERE (
+        $1::text IS NULL
+        OR name ILIKE '%' || $1::text || '%'
+    )
+    AND (
+        $2::text IS NULL
+        OR category = $2::text
+    )
+`
+
+type AdminCountProductsParams struct {
+	Search   pgtype.Text
+	Category pgtype.Text
+}
+
+func (q *Queries) AdminCountProducts(ctx context.Context, arg AdminCountProductsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, adminCountProducts, arg.Search, arg.Category)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const adminGetDistinctCategories = `-- name: AdminGetDistinctCategories :many
+SELECT DISTINCT category
+FROM products
+ORDER BY category
+`
+
+func (q *Queries) AdminGetDistinctCategories(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, adminGetDistinctCategories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var category string
+		if err := rows.Scan(&category); err != nil {
+			return nil, err
+		}
+		items = append(items, category)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const adminGetProductByID = `-- name: AdminGetProductByID :one
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at
+FROM products
+WHERE id = $1
+`
+
+func (q *Queries) AdminGetProductByID(ctx context.Context, id pgtype.UUID) (Product, error) {
+	row := q.db.QueryRow(ctx, adminGetProductByID, id)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Price,
+		&i.Stock,
+		&i.Sku,
+		&i.Category,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const adminListProducts = `-- name: AdminListProducts :many
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at
+FROM products
+WHERE (
+        $3::text IS NULL
+        OR name ILIKE '%' || $3::text || '%'
+    )
+    AND (
+        $4::text IS NULL
+        OR category = $4::text
+    )
+ORDER BY created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type AdminListProductsParams struct {
+	Limit    int32
+	Offset   int32
+	Search   pgtype.Text
+	Category pgtype.Text
+}
+
+func (q *Queries) AdminListProducts(ctx context.Context, arg AdminListProductsParams) ([]Product, error) {
+	rows, err := q.db.Query(ctx, adminListProducts,
+		arg.Limit,
+		arg.Offset,
+		arg.Search,
+		arg.Category,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Product
+	for rows.Next() {
+		var i Product
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Description,
+			&i.Price,
+			&i.Stock,
+			&i.Sku,
+			&i.Category,
+			&i.IsActive,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const countProducts = `-- name: CountProducts :one
 SELECT COUNT(*)
 FROM products
@@ -56,7 +189,7 @@ type CreateProductParams struct {
 	Price       pgtype.Numeric
 	Stock       int32
 	Sku         string
-	Category    pgtype.Text
+	Category    string
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
@@ -84,38 +217,42 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 	return i, err
 }
 
+const getDistinctCategories = `-- name: GetDistinctCategories :many
+SELECT DISTINCT category
+FROM products
+WHERE is_active = true
+ORDER BY category
+`
+
+func (q *Queries) GetDistinctCategories(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, getDistinctCategories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var category string
+		if err := rows.Scan(&category); err != nil {
+			return nil, err
+		}
+		items = append(items, category)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getProductByID = `-- name: GetProductByID :one
 SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at
 FROM products
 WHERE id = $1
+    AND is_active = true
 `
 
 func (q *Queries) GetProductByID(ctx context.Context, id pgtype.UUID) (Product, error) {
 	row := q.db.QueryRow(ctx, getProductByID, id)
-	var i Product
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Description,
-		&i.Price,
-		&i.Stock,
-		&i.Sku,
-		&i.Category,
-		&i.IsActive,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const getProductBySKU = `-- name: GetProductBySKU :one
-SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at
-FROM products
-WHERE sku = $1
-`
-
-func (q *Queries) GetProductBySKU(ctx context.Context, sku string) (Product, error) {
-	row := q.db.QueryRow(ctx, getProductBySKU, sku)
 	var i Product
 	err := row.Scan(
 		&i.ID,
@@ -222,11 +359,10 @@ SET name = $1,
     description = $2,
     price = $3,
     stock = $4,
-    sku = $5,
-    category = $6,
-    is_active = $7,
+    category = $5,
+    is_active = $6,
     updated_at = now()
-WHERE id = $8
+WHERE id = $7
 RETURNING id, name, description, price, stock, sku, category, is_active, created_at, updated_at
 `
 
@@ -235,8 +371,7 @@ type UpdateProductParams struct {
 	Description pgtype.Text
 	Price       pgtype.Numeric
 	Stock       int32
-	Sku         string
-	Category    pgtype.Text
+	Category    string
 	IsActive    bool
 	ID          pgtype.UUID
 }
@@ -247,7 +382,6 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		arg.Description,
 		arg.Price,
 		arg.Stock,
-		arg.Sku,
 		arg.Category,
 		arg.IsActive,
 		arg.ID,

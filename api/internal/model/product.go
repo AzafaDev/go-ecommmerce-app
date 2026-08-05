@@ -12,7 +12,7 @@ type CreateProductRequest struct {
 	Price       float64 `json:"price" validate:"required,gt=0"`
 	Stock       int     `json:"stock" validate:"gte=0"`
 	SKU         string  `json:"sku" validate:"required,min=3,max=50"`
-	Category    string  `json:"category" validate:"max=100"`
+	Category    string  `json:"category" validate:"required,max=100"`
 }
 
 type UpdateProductRequest struct {
@@ -20,8 +20,7 @@ type UpdateProductRequest struct {
 	Description string  `json:"description" validate:"max=2000"`
 	Price       float64 `json:"price" validate:"required,gt=0"`
 	Stock       int     `json:"stock" validate:"gte=0"`
-	SKU         string  `json:"sku" validate:"required,min=3,max=50"`
-	Category    string  `json:"category" validate:"max=100"`
+	Category    string  `json:"category" validate:"required,max=100"`
 	IsActive    bool    `json:"is_active"`
 }
 
@@ -48,4 +47,8 @@ type MetaListProductResponse struct {
 	Limit      int `json:"limit"`
 	TotalItems int `json:"total_items"`
 	TotalPages int `json:"total_pages"`
+}
+
+type CategoriesResponse struct {
+	Categories []string `json:"categories"`
 }

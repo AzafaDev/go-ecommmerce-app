@@ -6,6 +6,6 @@ export const productSchema = z.object({
   price: z.coerce.number().gt(0, 'Must be greater than 0'),
   stock: z.coerce.number().int('Must be a whole number').gte(0, 'Cannot be negative'),
   sku: z.string().min(3, 'At least 3 characters').max(50, 'Too long'),
-  category: z.string().max(100, 'Too long'),
+  category: z.string().min(1, 'Required').max(100, 'Too long'),
 })
 export type ProductFormInput = z.infer<typeof productSchema>

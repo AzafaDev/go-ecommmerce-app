@@ -42,6 +42,66 @@ func (m *MockQuerier) EXPECT() *MockQuerierMockRecorder {
 	return m.recorder
 }
 
+// AdminCountProducts mocks base method.
+func (m *MockQuerier) AdminCountProducts(ctx context.Context, arg repository.AdminCountProductsParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdminCountProducts", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdminCountProducts indicates an expected call of AdminCountProducts.
+func (mr *MockQuerierMockRecorder) AdminCountProducts(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdminCountProducts", reflect.TypeOf((*MockQuerier)(nil).AdminCountProducts), ctx, arg)
+}
+
+// AdminGetDistinctCategories mocks base method.
+func (m *MockQuerier) AdminGetDistinctCategories(ctx context.Context) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdminGetDistinctCategories", ctx)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdminGetDistinctCategories indicates an expected call of AdminGetDistinctCategories.
+func (mr *MockQuerierMockRecorder) AdminGetDistinctCategories(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdminGetDistinctCategories", reflect.TypeOf((*MockQuerier)(nil).AdminGetDistinctCategories), ctx)
+}
+
+// AdminGetProductByID mocks base method.
+func (m *MockQuerier) AdminGetProductByID(ctx context.Context, id pgtype.UUID) (repository.Product, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdminGetProductByID", ctx, id)
+	ret0, _ := ret[0].(repository.Product)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdminGetProductByID indicates an expected call of AdminGetProductByID.
+func (mr *MockQuerierMockRecorder) AdminGetProductByID(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdminGetProductByID", reflect.TypeOf((*MockQuerier)(nil).AdminGetProductByID), ctx, id)
+}
+
+// AdminListProducts mocks base method.
+func (m *MockQuerier) AdminListProducts(ctx context.Context, arg repository.AdminListProductsParams) ([]repository.Product, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdminListProducts", ctx, arg)
+	ret0, _ := ret[0].([]repository.Product)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdminListProducts indicates an expected call of AdminListProducts.
+func (mr *MockQuerierMockRecorder) AdminListProducts(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdminListProducts", reflect.TypeOf((*MockQuerier)(nil).AdminListProducts), ctx, arg)
+}
+
 // CountProducts mocks base method.
 func (m *MockQuerier) CountProducts(ctx context.Context, arg repository.CountProductsParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -159,6 +219,21 @@ func (mr *MockQuerierMockRecorder) DeletePasswordTokenByTokenHash(ctx, tokenHash
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeletePasswordTokenByTokenHash", reflect.TypeOf((*MockQuerier)(nil).DeletePasswordTokenByTokenHash), ctx, tokenHash)
 }
 
+// GetDistinctCategories mocks base method.
+func (m *MockQuerier) GetDistinctCategories(ctx context.Context) ([]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetDistinctCategories", ctx)
+	ret0, _ := ret[0].([]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetDistinctCategories indicates an expected call of GetDistinctCategories.
+func (mr *MockQuerierMockRecorder) GetDistinctCategories(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDistinctCategories", reflect.TypeOf((*MockQuerier)(nil).GetDistinctCategories), ctx)
+}
+
 // GetEmailVerificationByTokenHash mocks base method.
 func (m *MockQuerier) GetEmailVerificationByTokenHash(ctx context.Context, tokenHash string) (repository.EmailVerificationToken, error) {
 	m.ctrl.T.Helper()
@@ -187,21 +262,6 @@ func (m *MockQuerier) GetProductByID(ctx context.Context, id pgtype.UUID) (repos
 func (mr *MockQuerierMockRecorder) GetProductByID(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProductByID", reflect.TypeOf((*MockQuerier)(nil).GetProductByID), ctx, id)
-}
-
-// GetProductBySKU mocks base method.
-func (m *MockQuerier) GetProductBySKU(ctx context.Context, sku string) (repository.Product, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetProductBySKU", ctx, sku)
-	ret0, _ := ret[0].(repository.Product)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetProductBySKU indicates an expected call of GetProductBySKU.
-func (mr *MockQuerierMockRecorder) GetProductBySKU(ctx, sku any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProductBySKU", reflect.TypeOf((*MockQuerier)(nil).GetProductBySKU), ctx, sku)
 }
 
 // GetRefreshToken mocks base method.

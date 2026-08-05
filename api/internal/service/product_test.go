@@ -38,7 +38,7 @@ func sampleProduct() repository.Product {
 		Price:     service.Float64ToNumeric(19.99),
 		Stock:     10,
 		Sku:       "SKU-001",
-		Category:  pgtype.Text{String: "apparel", Valid: true},
+		Category:  "apparel",
 		IsActive:  true,
 		CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
@@ -112,11 +112,12 @@ func TestProductService_CreateProduct(t *testing.T) {
 }
 
 func TestProductService_UpdateProduct(t *testing.T) {
+	// SKU is deliberately absent: it's immutable after create, and
+	// model.UpdateProductRequest has no SKU field to carry one anyway.
 	req := model.UpdateProductRequest{
 		Name:     "Kaos Polos Updated",
 		Price:    24.5,
 		Stock:    5,
-		SKU:      "SKU-001",
 		Category: "apparel",
 		IsActive: true,
 	}
@@ -131,16 +132,6 @@ func TestProductService_UpdateProduct(t *testing.T) {
 			name: "success",
 			setup: func(repo *repomocks.MockQuerier) {
 				repo.EXPECT().UpdateProduct(gomock.Any(), gomock.Any()).Return(sampleProduct(), nil)
-			},
-		},
-		{
-			name: "sku already taken by another product",
-			setup: func(repo *repomocks.MockQuerier) {
-				repo.EXPECT().UpdateProduct(gomock.Any(), gomock.Any()).
-					Return(repository.Product{}, &pgconn.PgError{Code: "23505"})
-			},
-			assertErr: func(t *testing.T, err error) {
-				assert.ErrorIs(t, err, service.ErrSKUTaken)
 			},
 		},
 		{
@@ -161,7 +152,6 @@ func TestProductService_UpdateProduct(t *testing.T) {
 			},
 			assertErr: func(t *testing.T, err error) {
 				assert.Error(t, err)
-				assert.NotErrorIs(t, err, service.ErrSKUTaken)
 				assert.NotErrorIs(t, err, service.ErrProductNotFound)
 			},
 		},
@@ -183,6 +173,23 @@ func TestProductService_UpdateProduct(t *testing.T) {
 			require.NotNil(t, product)
 		})
 	}
+
+	t.Run("sku is never part of the update params", func(t *testing.T) {
+		// Regression guard: UpdateProductParams has no Sku field at all
+		// (compile-time enforced), so an update can never touch it. This
+		// pins the intent so a future sqlc regen that reintroduces the
+		// field gets caught here instead of silently making SKU mutable.
+		svc, mockRepo := newTestProductService(t)
+		mockRepo.EXPECT().UpdateProduct(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg repository.UpdateProductParams) (repository.Product, error) {
+				p := sampleProduct()
+				p.Category = arg.Category
+				return p, nil
+			})
+
+		_, err := svc.UpdateProduct(context.Background(), req, id)
+		require.NoError(t, err)
+	})
 }
 
 func TestProductService_DeleteProduct(t *testing.T) {
@@ -220,32 +227,46 @@ func TestProductService_DeleteProduct(t *testing.T) {
 func TestProductService_GetProductByID(t *testing.T) {
 	id := uuid.New()
 
-	t.Run("success", func(t *testing.T) {
+	t.Run("public: success uses the is_active-filtered query", func(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(sampleProduct(), nil)
 
-		product, err := svc.GetProductByID(context.Background(), id)
+		product, err := svc.GetProductByID(context.Background(), id, false)
 
 		require.NoError(t, err)
 		require.NotNil(t, product)
 		assert.Equal(t, "19.99", product.Price)
 	})
 
-	t.Run("product not found", func(t *testing.T) {
+	t.Run("public: not found (also covers inactive product, filtered at query level)", func(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(repository.Product{}, pgx.ErrNoRows)
 
-		product, err := svc.GetProductByID(context.Background(), id)
+		product, err := svc.GetProductByID(context.Background(), id, false)
 
 		assert.ErrorIs(t, err, service.ErrProductNotFound)
 		assert.Nil(t, product)
+	})
+
+	t.Run("admin: includeInactive=true hits the unfiltered admin query", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		inactive := sampleProduct()
+		inactive.IsActive = false
+		mockRepo.EXPECT().AdminGetProductByID(gomock.Any(), gomock.Any()).Return(inactive, nil)
+		// The public query must NOT be called on the admin path.
+
+		product, err := svc.GetProductByID(context.Background(), id, true)
+
+		require.NoError(t, err)
+		require.NotNil(t, product)
+		assert.False(t, product.IsActive)
 	})
 
 	t.Run("unexpected db error", func(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(repository.Product{}, errors.New("connection reset"))
 
-		product, err := svc.GetProductByID(context.Background(), id)
+		product, err := svc.GetProductByID(context.Background(), id, false)
 
 		assert.Error(t, err)
 		assert.NotErrorIs(t, err, service.ErrProductNotFound)
@@ -273,7 +294,7 @@ func TestProductService_ListProducts(t *testing.T) {
 				return 1, nil
 			})
 
-		res, err := svc.ListProducts(context.Background(), "", "", 1, 10)
+		res, err := svc.ListProducts(context.Background(), "", "", 1, 10, false)
 
 		require.NoError(t, err)
 		assert.Len(t, res.Data, 1)
@@ -290,7 +311,7 @@ func TestProductService_ListProducts(t *testing.T) {
 			})
 		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
 
-		_, err := svc.ListProducts(context.Background(), "kaos", "apparel", 1, 10)
+		_, err := svc.ListProducts(context.Background(), "kaos", "apparel", 1, 10, false)
 
 		require.NoError(t, err)
 	})
@@ -307,10 +328,60 @@ func TestProductService_ListProducts(t *testing.T) {
 			})
 		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
 
-		res, err := svc.ListProducts(context.Background(), "", "", 0, 10)
+		res, err := svc.ListProducts(context.Background(), "", "", 0, 10, false)
 
 		require.NoError(t, err)
 		assert.Equal(t, 1, res.Meta.Page)
+	})
+
+	t.Run("limit <= 0 defaults to 10", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+
+		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.Product, error) {
+				assert.Equal(t, int32(10), arg.Limit)
+				return []repository.Product{}, nil
+			})
+		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
+
+		res, err := svc.ListProducts(context.Background(), "", "", 1, 0, false)
+
+		require.NoError(t, err)
+		assert.Equal(t, 10, res.Meta.Limit)
+	})
+
+	t.Run("limit=100 is honored exactly, not reset to the default", func(t *testing.T) {
+		// Regression guard: a prior `limit >= 100` check reset the boundary
+		// value itself to the default (10) instead of clamping above it.
+		svc, mockRepo := newTestProductService(t)
+
+		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.Product, error) {
+				assert.Equal(t, int32(100), arg.Limit)
+				return []repository.Product{}, nil
+			})
+		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
+
+		res, err := svc.ListProducts(context.Background(), "", "", 1, 100, false)
+
+		require.NoError(t, err)
+		assert.Equal(t, 100, res.Meta.Limit)
+	})
+
+	t.Run("limit > 100 is clamped to 100, not reset to the default", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+
+		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.Product, error) {
+				assert.Equal(t, int32(100), arg.Limit)
+				return []repository.Product{}, nil
+			})
+		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
+
+		res, err := svc.ListProducts(context.Background(), "", "", 1, 999, false)
+
+		require.NoError(t, err)
+		assert.Equal(t, 100, res.Meta.Limit)
 	})
 
 	t.Run("pagination metadata is computed from total items", func(t *testing.T) {
@@ -323,7 +394,7 @@ func TestProductService_ListProducts(t *testing.T) {
 			})
 		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(23), nil)
 
-		res, err := svc.ListProducts(context.Background(), "", "", 2, 5)
+		res, err := svc.ListProducts(context.Background(), "", "", 2, 5, false)
 
 		require.NoError(t, err)
 		assert.Equal(t, 2, res.Meta.Page)
@@ -337,7 +408,7 @@ func TestProductService_ListProducts(t *testing.T) {
 		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).Return(nil, errors.New("connection reset"))
 		// CountProducts deliberately NOT EXPECT()'d: must short-circuit on the first error.
 
-		_, err := svc.ListProducts(context.Background(), "", "", 1, 10)
+		_, err := svc.ListProducts(context.Background(), "", "", 1, 10, false)
 
 		assert.Error(t, err)
 	})
@@ -347,7 +418,65 @@ func TestProductService_ListProducts(t *testing.T) {
 		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).Return([]repository.Product{}, nil)
 		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), errors.New("connection reset"))
 
-		_, err := svc.ListProducts(context.Background(), "", "", 1, 10)
+		_, err := svc.ListProducts(context.Background(), "", "", 1, 10, false)
+
+		assert.Error(t, err)
+	})
+
+	t.Run("includeInactive=true routes to the admin queries", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		inactive := sampleProduct()
+		inactive.IsActive = false
+
+		mockRepo.EXPECT().AdminListProducts(gomock.Any(), gomock.Any()).Return([]repository.Product{inactive}, nil)
+		mockRepo.EXPECT().AdminCountProducts(gomock.Any(), gomock.Any()).Return(int64(1), nil)
+		// The public ListProducts/CountProducts must NOT be called on the admin path.
+
+		res, err := svc.ListProducts(context.Background(), "", "", 1, 10, true)
+
+		require.NoError(t, err)
+		require.Len(t, res.Data, 1)
+		assert.False(t, res.Data[0].IsActive)
+	})
+}
+
+func TestProductService_ListCategories(t *testing.T) {
+	t.Run("public uses the active-only query", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		mockRepo.EXPECT().GetDistinctCategories(gomock.Any()).Return([]string{"apparel", "shoes"}, nil)
+
+		res, err := svc.ListCategories(context.Background(), false)
+
+		require.NoError(t, err)
+		assert.Equal(t, []string{"apparel", "shoes"}, res.Categories)
+	})
+
+	t.Run("admin uses the unfiltered query", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		mockRepo.EXPECT().AdminGetDistinctCategories(gomock.Any()).Return([]string{"apparel", "discontinued"}, nil)
+
+		res, err := svc.ListCategories(context.Background(), true)
+
+		require.NoError(t, err)
+		assert.Equal(t, []string{"apparel", "discontinued"}, res.Categories)
+	})
+
+	t.Run("nil result is normalized to an empty slice, not null", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		mockRepo.EXPECT().GetDistinctCategories(gomock.Any()).Return(nil, nil)
+
+		res, err := svc.ListCategories(context.Background(), false)
+
+		require.NoError(t, err)
+		assert.NotNil(t, res.Categories)
+		assert.Empty(t, res.Categories)
+	})
+
+	t.Run("error is propagated", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		mockRepo.EXPECT().GetDistinctCategories(gomock.Any()).Return(nil, errors.New("connection reset"))
+
+		_, err := svc.ListCategories(context.Background(), false)
 
 		assert.Error(t, err)
 	})

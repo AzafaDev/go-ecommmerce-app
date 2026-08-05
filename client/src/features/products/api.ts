@@ -16,7 +16,15 @@ export type ProductInput = {
   category: string
 }
 
-export type UpdateProductInput = ProductInput & { is_active: boolean }
+// SKU is immutable after create — the API doesn't accept it on update.
+export type UpdateProductInput = {
+  name: string
+  description: string
+  price: number
+  stock: number
+  category: string
+  is_active: boolean
+}
 
 function buildQuery(params: ListProductsParams) {
   const query = new URLSearchParams()
@@ -27,6 +35,7 @@ function buildQuery(params: ListProductsParams) {
   return qs ? `?${qs}` : ''
 }
 
+// Public catalog — only ever returns active products.
 export function listProducts(params: ListProductsParams) {
   return apiFetch<{ products: Product[]; meta: ProductListMeta }>(
     `/products${buildQuery(params)}`,
@@ -35,6 +44,25 @@ export function listProducts(params: ListProductsParams) {
 
 export function getProduct(id: string) {
   return apiFetch<{ product: Product }>(`/products/${id}`)
+}
+
+export function listCategories() {
+  return apiFetch<{ categories: string[] }>('/products/categories')
+}
+
+// Admin catalog — includes inactive (soft-deleted) products, requires admin auth.
+export function listAdminProducts(params: ListProductsParams) {
+  return apiFetch<{ products: Product[]; meta: ProductListMeta }>(
+    `/admin/products${buildQuery(params)}`,
+  )
+}
+
+export function getAdminProduct(id: string) {
+  return apiFetch<{ product: Product }>(`/admin/products/${id}`)
+}
+
+export function listAdminCategories() {
+  return apiFetch<{ categories: string[] }>('/admin/products/categories')
 }
 
 export function createProduct(input: ProductInput) {
