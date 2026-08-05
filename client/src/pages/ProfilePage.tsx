@@ -1,16 +1,10 @@
 import { BadgeCheck, LogOut } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { Logo } from '../components/Logo'
 import { Button } from '../components/Button'
 import { Card } from '../components/Card'
 import { DataRow } from '../components/DataRow'
-
-const user = {
-  fullName: 'Jane Doe',
-  email: 'jane@example.com',
-  role: 'customer',
-  accountId: 'GC-8F21-40C9',
-  memberSince: 'Jan 12, 2026',
-}
+import { useAuth } from '../features/auth/auth-context'
 
 function initials(name: string) {
   return name
@@ -21,7 +15,25 @@ function initials(name: string) {
     .toUpperCase()
 }
 
+function formatDate(isoDate: string) {
+  return new Date(isoDate).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
 export function ProfilePage() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  if (!user) return null
+
+  const handleLogout = async () => {
+    await logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-paper px-4 py-12">
       <div className="w-full max-w-[420px] animate-rise">
@@ -32,15 +44,11 @@ export function ProfilePage() {
         <Card eyebrow="go-commerce / account">
           <div className="flex items-center gap-3.5">
             <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-ink bg-brand-600 text-[15px] font-bold text-white shadow-hard-sm">
-              {initials(user.fullName)}
+              {initials(user.full_name)}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-[16px] font-extrabold text-ink">
-                {user.fullName}
-              </p>
-              <p className="truncate text-[13.5px] text-ink-muted">
-                {user.email}
-              </p>
+              <p className="truncate text-[16px] font-extrabold text-ink">{user.full_name}</p>
+              <p className="truncate text-[13.5px] text-ink-muted">{user.email}</p>
             </div>
             <span className="ml-auto inline-flex shrink-0 items-center rounded-full border-2 border-ink bg-brand-50 px-2.5 py-1 text-[11.5px] font-bold capitalize text-brand-700">
               {user.role}
@@ -50,20 +58,24 @@ export function ProfilePage() {
           <div className="my-6 border-t-2 border-line" />
 
           <div className="flex flex-col">
-            <DataRow label="Account ID" value={user.accountId} />
-            <DataRow label="Member since" value={user.memberSince} />
+            <DataRow label="Account ID" value={`GC-${user.id.split('-')[0].toUpperCase()}`} />
+            <DataRow label="Member since" value={formatDate(user.created_at)} />
             <DataRow
               label="Email status"
               value={
-                <span className="inline-flex items-center gap-1 text-brand-700">
-                  <BadgeCheck size={13} /> Verified
-                </span>
+                user.email_verified_at ? (
+                  <span className="inline-flex items-center gap-1 text-brand-700">
+                    <BadgeCheck size={13} /> Verified
+                  </span>
+                ) : (
+                  'Unverified'
+                )
               }
             />
           </div>
 
           <div className="mt-7">
-            <Button variant="secondary" type="button">
+            <Button variant="secondary" type="button" onClick={handleLogout}>
               <LogOut size={15} className="mr-2" />
               Log out
             </Button>

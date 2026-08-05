@@ -15,6 +15,10 @@
   --color-brand-700: #1d4ed8;
   --color-brand-800: #1e40af;
 
+  --color-danger-50: #fef2f2;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+
   --shadow-hard-sm: 2px 2px 0 0 var(--color-ink);
   --shadow-hard: 4px 4px 0 0 var(--color-ink);
   --shadow-hard-press: 1px 1px 0 0 var(--color-ink);
