@@ -80,7 +80,7 @@ func (h *ProductHandler) CreateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
+	idStr := chi.URLParam(r, "id")
 	if idStr == "" {
 		slog.Error("update product", "error", fmt.Errorf("id product is empty"))
 		response.WriteErrorJSON("id product is empty", http.StatusBadRequest, w)
@@ -133,7 +133,7 @@ func (h *ProductHandler) UpdateProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
+	idStr := chi.URLParam(r, "id")
 	if idStr == "" {
 		slog.Error("delete product", "error", fmt.Errorf("id product is empty"))
 		response.WriteErrorJSON("id product is empty", http.StatusBadRequest, w)
@@ -168,7 +168,7 @@ func (h *ProductHandler) DeleteProduct(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *ProductHandler) GetProductByID(w http.ResponseWriter, r *http.Request) {
-	idStr := r.PathValue("id")
+	idStr := chi.URLParam(r, "id")
 	if idStr == "" {
 		slog.Error("get product by id", "error", fmt.Errorf("id product is empty"))
 		response.WriteErrorJSON("id product is empty", http.StatusBadRequest, w)
