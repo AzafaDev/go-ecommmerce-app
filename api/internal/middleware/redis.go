@@ -80,6 +80,16 @@ func EmailKeyFunc(endpoint string) func(*http.Request) (string, error) {
 	}
 }
 
+func UserIDKeyFunc(endpoint string) func(*http.Request) (string, error) {
+	return func(r *http.Request) (string, error) {
+		claims, err := GetClaims(r.Context())
+		if err != nil {
+			return "", err
+		}
+		return fmt.Sprintf("%s:%s", endpoint, claims.ID), nil
+	}
+}
+
 func IPAndEmailKeyFunc(endpoint string) func(*http.Request) (string, error) {
 	return func(r *http.Request) (string, error) {
 		email, err := peekEmail(r)

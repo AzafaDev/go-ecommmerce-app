@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -19,16 +20,34 @@ import (
 const pgUniqueViolationCode = "23505"
 
 type UserService struct {
-	repo  *repository.Queries
+	repo  repository.Querier
 	cfg   *config.Config
 	email EmailSender
 }
 
-func NewUserService(repo *repository.Queries, cfg *config.Config, email EmailSender) *UserService {
+func NewUserService(repo repository.Querier, cfg *config.Config, email EmailSender) *UserService {
 	return &UserService{
 		repo:  repo,
 		cfg:   cfg,
 		email: email,
+	}
+}
+
+func toUserResponse(u repository.User) *model.UserResponse {
+	var emailVerifiedAt *time.Time
+	if u.EmailVerifiedAt.Valid {
+		t := u.EmailVerifiedAt.Time
+		emailVerifiedAt = &t
+	}
+
+	return &model.UserResponse{
+		ID:              u.ID.Bytes,
+		FullName:        u.FullName,
+		Email:           u.Email,
+		Role:            u.Role,
+		CreatedAt:       u.CreatedAt.Time,
+		UpdatedAt:       u.UpdatedAt.Time,
+		EmailVerifiedAt: emailVerifiedAt,
 	}
 }
 
@@ -77,14 +96,7 @@ func (u *UserService) Register(ctx context.Context, req model.RegisterUserReques
 		return nil, fmt.Errorf("error in sending verification email: %w", err)
 	}
 
-	return &model.UserResponse{
-		ID:        createdUser.ID.Bytes,
-		FullName:  createdUser.FullName,
-		Email:     createdUser.Email,
-		Role:      createdUser.Role,
-		CreatedAt: createdUser.CreatedAt.Time,
-		UpdatedAt: createdUser.UpdatedAt.Time,
-	}, nil
+	return toUserResponse(createdUser), nil
 }
 
 func (u *UserService) Login(ctx context.Context, req model.LoginUserRequest) (*model.UserResponse, string, string, error) {
@@ -131,14 +143,7 @@ func (u *UserService) Login(ctx context.Context, req model.LoginUserRequest) (*m
 
 	slog.Info("security_event", "event", "login_success", "user_id", existingUser.ID)
 
-	return &model.UserResponse{
-		ID:        existingUser.ID.Bytes,
-		FullName:  existingUser.FullName,
-		Email:     existingUser.Email,
-		Role:      existingUser.Role,
-		CreatedAt: existingUser.CreatedAt.Time,
-		UpdatedAt: existingUser.UpdatedAt.Time,
-	}, signedToken, rawToken, nil
+	return toUserResponse(existingUser), signedToken, rawToken, nil
 }
 
 func (u *UserService) Refresh(ctx context.Context, rawToken string) (string, string, error) {
@@ -208,14 +213,16 @@ func (u *UserService) UpdateRole(ctx context.Context, userID pgtype.UUID, role s
 		return nil, fmt.Errorf("error in updating user role: %w", err)
 	}
 
-	return &model.UserResponse{
-		ID:        updatedUser.ID.Bytes,
-		FullName:  updatedUser.FullName,
-		Email:     updatedUser.Email,
-		Role:      updatedUser.Role,
-		CreatedAt: updatedUser.CreatedAt.Time,
-		UpdatedAt: updatedUser.UpdatedAt.Time,
-	}, nil
+	return toUserResponse(updatedUser), nil
+}
+
+func (u *UserService) Me(ctx context.Context, userID pgtype.UUID) (*model.UserResponse, error) {
+	existingUser, err := u.repo.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("error in getting user by id: %w", err)
+	}
+
+	return toUserResponse(existingUser), nil
 }
 
 func (u *UserService) LogoutAllDevices(ctx context.Context, userID pgtype.UUID) error {
@@ -349,6 +356,45 @@ func (u *UserService) ResetPassword(ctx context.Context, rawToken, password stri
 	}
 
 	slog.Info("security_event", "event", "password_reset_succeeded", "user_id", exisitngPasswordToken.UserID)
+
+	return nil
+}
+
+func (u *UserService) ChangePassword(ctx context.Context, req model.ChangePasswordRequest, userID uuid.UUID) error {
+
+	existingUser, err := u.repo.GetUserByID(ctx, pgtype.UUID{
+		Bytes: userID,
+		Valid: true,
+	})
+
+	if err != nil {
+		return fmt.Errorf("error in getting use by id: %w", err)
+	}
+
+	if err := security.ComparePassword(existingUser.PasswordHash, req.OldPassword); err != nil {
+		slog.Warn("security_event", "event", "change_password_failed", "reason", "invalid_old_password", "user_id", existingUser.ID)
+		return ErrInvalidOldPassword
+	}
+
+	newPasswordHash, err := security.HashPassword(req.NewPassword)
+	if err != nil {
+		return fmt.Errorf("error in hashing new password: %w", err)
+	}
+
+	updatedUser, err := u.repo.UpdatePasswordUser(ctx, repository.UpdatePasswordUserParams{
+		PasswordHash: newPasswordHash,
+		ID:           existingUser.ID,
+	})
+
+	if err != nil {
+		return fmt.Errorf("error in updating password user: %w", err)
+	}
+
+	if err := u.LogoutAllDevices(ctx, updatedUser.ID); err != nil {
+		return fmt.Errorf("error in logout all devices service method: %w", err)
+	}
+
+	slog.Info("security_event", "event", "password_changed", "user_id", updatedUser.ID)
 
 	return nil
 }

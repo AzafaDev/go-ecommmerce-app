@@ -9,6 +9,7 @@ import (
 )
 
 type Config struct {
+	Env                 string
 	Port                string
 	DatabaseURL         string
 	JWTSecret           string
@@ -53,6 +54,7 @@ func NewConfig() (*Config, error) {
 	}
 
 	cfg := Config{
+		Env:                 getEnv("APP_ENV", "development"),
 		Port:                getEnv("PORT", "8080"),
 		JWTExpiry:           jwtExpiry,
 		RefreshTokenExpiry:  refreshTokenExpiry,

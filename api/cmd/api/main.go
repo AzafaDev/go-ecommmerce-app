@@ -56,7 +56,7 @@ func main() {
 	repo := repository.New(dbPool)
 
 	userService := service.NewUserService(repo, cfg, senderEmail)
-	userHandler := handler.NewUserHandler(userService, cfg.JWTSecret, cfg.RefreshTokenExpiry, rdb)
+	userHandler := handler.NewUserHandler(userService, cfg.JWTSecret, cfg.RefreshTokenExpiry, rdb, cfg.Env)
 
 	r := chi.NewRouter()
 
