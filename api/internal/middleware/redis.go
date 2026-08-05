@@ -35,7 +35,7 @@ func RateLimit(rdb *redis.Client, limit int, window time.Duration, keyFunc func(
 			_, err = pipe.Exec(r.Context())
 			if err != nil && err != redis.Nil {
 				slog.Error("rate limit", "error", err)
-				response.WriteErrorJSON("internal server error", http.StatusInternalServerError, w)
+				next.ServeHTTP(w, r)
 				return
 			}
 
