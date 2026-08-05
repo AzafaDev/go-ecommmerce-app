@@ -26,6 +26,19 @@ type PasswordResetToken struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type Product struct {
+	ID          pgtype.UUID
+	Name        string
+	Description pgtype.Text
+	Price       pgtype.Numeric
+	Stock       int32
+	Sku         string
+	Category    pgtype.Text
+	IsActive    bool
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+}
+
 type RefreshToken struct {
 	ID        pgtype.UUID
 	UserID    pgtype.UUID

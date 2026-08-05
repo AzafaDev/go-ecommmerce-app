@@ -58,6 +58,9 @@ func main() {
 	userService := service.NewUserService(repo, cfg, senderEmail)
 	userHandler := handler.NewUserHandler(userService, cfg.JWTSecret, cfg.RefreshTokenExpiry, rdb, cfg.Env)
 
+	productService := service.NewProductService(repo)
+	productHandler := handler.NewProductHandler(productService, cfg.JWTSecret)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -69,10 +72,12 @@ func main() {
 	r.Route("/api", func(r chi.Router) {
 		r.Use(cors.Handler(cors.Options{
 			AllowedOrigins:   []string{cfg.FrontendURL},
+			AllowedHeaders:   []string{"Content-Type", "Authorization"},
 			AllowCredentials: true,
 			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"},
 		}))
 		userHandler.UserRoutes(r)
+		productHandler.ProductRoutes(r)
 	})
 
 	srv := http.Server{

@@ -12,16 +12,19 @@ FROM users
 WHERE id = $1;
 -- name: SetUserVerified :one
 UPDATE users
-SET email_verified_at = now()
+SET email_verified_at = now(),
+    updated_at = now()
 WHERE id = $1
 RETURNING *;
 -- name: UpdatePasswordUser :one
 UPDATE users
-SET password_hash = $1
+SET password_hash = $1,
+    updated_at = now()
 WHERE id = $2
 RETURNING *;
 -- name: UpdateUserRole :one
 UPDATE users
-SET role = $1
+SET role = $1,
+    updated_at = now()
 WHERE id = $2
 RETURNING *;

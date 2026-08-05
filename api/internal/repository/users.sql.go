@@ -85,7 +85,8 @@ func (q *Queries) GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
 
 const setUserVerified = `-- name: SetUserVerified :one
 UPDATE users
-SET email_verified_at = now()
+SET email_verified_at = now(),
+    updated_at = now()
 WHERE id = $1
 RETURNING id, full_name, email, password_hash, role, created_at, updated_at, email_verified_at
 `
@@ -108,7 +109,8 @@ func (q *Queries) SetUserVerified(ctx context.Context, id pgtype.UUID) (User, er
 
 const updatePasswordUser = `-- name: UpdatePasswordUser :one
 UPDATE users
-SET password_hash = $1
+SET password_hash = $1,
+    updated_at = now()
 WHERE id = $2
 RETURNING id, full_name, email, password_hash, role, created_at, updated_at, email_verified_at
 `
@@ -136,7 +138,8 @@ func (q *Queries) UpdatePasswordUser(ctx context.Context, arg UpdatePasswordUser
 
 const updateUserRole = `-- name: UpdateUserRole :one
 UPDATE users
-SET role = $1
+SET role = $1,
+    updated_at = now()
 WHERE id = $2
 RETURNING id, full_name, email, password_hash, role, created_at, updated_at, email_verified_at
 `

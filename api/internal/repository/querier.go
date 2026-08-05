@@ -11,6 +11,8 @@ import (
 )
 
 type Querier interface {
+	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
+	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateResetPasswordToken(ctx context.Context, arg CreateResetPasswordTokenParams) (PasswordResetToken, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
@@ -18,15 +20,19 @@ type Querier interface {
 	DeleteEmailVerificationByTokenHash(ctx context.Context, tokenHash string) error
 	DeletePasswordTokenByTokenHash(ctx context.Context, tokenHash string) error
 	GetEmailVerificationByTokenHash(ctx context.Context, tokenHash string) (EmailVerificationToken, error)
+	GetProductByID(ctx context.Context, id pgtype.UUID) (Product, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetRefreshTokenAnyStatus(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetResetPasswordTokenByTokenHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
+	ListProducts(ctx context.Context, arg ListProductsParams) ([]ListProductsRow, error)
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	RevokeRefreshTokenByUserID(ctx context.Context, userID pgtype.UUID) error
 	SetUserVerified(ctx context.Context, id pgtype.UUID) (User, error)
+	SoftDeleteProduct(ctx context.Context, id pgtype.UUID) (Product, error)
 	UpdatePasswordUser(ctx context.Context, arg UpdatePasswordUserParams) (User, error)
+	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) (User, error)
 }
 
