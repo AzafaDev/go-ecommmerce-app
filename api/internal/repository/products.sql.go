@@ -108,12 +108,32 @@ func (q *Queries) GetProductByID(ctx context.Context, id pgtype.UUID) (Product, 
 	return i, err
 }
 
+const getProductBySKU = `-- name: GetProductBySKU :one
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at
+FROM products
+WHERE sku = $1
+`
+
+func (q *Queries) GetProductBySKU(ctx context.Context, sku string) (Product, error) {
+	row := q.db.QueryRow(ctx, getProductBySKU, sku)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Price,
+		&i.Stock,
+		&i.Sku,
+		&i.Category,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const listProducts = `-- name: ListProducts :many
-SELECT id,
-    name,
-    price,
-    category,
-    created_at
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at
 FROM products
 WHERE is_active = true
     AND (
@@ -135,15 +155,7 @@ type ListProductsParams struct {
 	Category pgtype.Text
 }
 
-type ListProductsRow struct {
-	ID        pgtype.UUID
-	Name      string
-	Price     pgtype.Numeric
-	Category  pgtype.Text
-	CreatedAt pgtype.Timestamptz
-}
-
-func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]ListProductsRow, error) {
+func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {
 	rows, err := q.db.Query(ctx, listProducts,
 		arg.Limit,
 		arg.Offset,
@@ -154,15 +166,20 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]L
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListProductsRow
+	var items []Product
 	for rows.Next() {
-		var i ListProductsRow
+		var i Product
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
+			&i.Description,
 			&i.Price,
+			&i.Stock,
+			&i.Sku,
 			&i.Category,
+			&i.IsActive,
 			&i.CreatedAt,
+			&i.UpdatedAt,
 		); err != nil {
 			return nil, err
 		}

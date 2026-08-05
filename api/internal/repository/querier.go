@@ -21,12 +21,13 @@ type Querier interface {
 	DeletePasswordTokenByTokenHash(ctx context.Context, tokenHash string) error
 	GetEmailVerificationByTokenHash(ctx context.Context, tokenHash string) (EmailVerificationToken, error)
 	GetProductByID(ctx context.Context, id pgtype.UUID) (Product, error)
+	GetProductBySKU(ctx context.Context, sku string) (Product, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetRefreshTokenAnyStatus(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetResetPasswordTokenByTokenHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
-	ListProducts(ctx context.Context, arg ListProductsParams) ([]ListProductsRow, error)
+	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	RevokeRefreshTokenByUserID(ctx context.Context, userID pgtype.UUID) error
 	SetUserVerified(ctx context.Context, id pgtype.UUID) (User, error)

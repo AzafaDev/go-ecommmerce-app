@@ -14,11 +14,7 @@ SELECT *
 FROM products
 WHERE id = $1;
 -- name: ListProducts :many
-SELECT id,
-    name,
-    price,
-    category,
-    created_at
+SELECT *
 FROM products
 WHERE is_active = true
     AND (
@@ -60,3 +56,7 @@ UPDATE products
 SET is_active = false
 WHERE id = $1
 RETURNING *;
+-- name: GetProductBySKU :one
+SELECT *
+FROM products
+WHERE sku = $1;

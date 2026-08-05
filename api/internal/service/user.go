@@ -17,7 +17,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const pgUniqueViolationCode = "23505"
 
 type UserService struct {
 	repo  repository.Querier
