@@ -61,6 +61,9 @@ func main() {
 	productService := service.NewProductService(repo)
 	productHandler := handler.NewProductHandler(productService, cfg.JWTSecret)
 
+	cartService := service.NewCartService(repo)
+	cartHandler := handler.NewCartHandler(cartService, cfg.JWTSecret)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -78,6 +81,7 @@ func main() {
 		}))
 		userHandler.UserRoutes(r)
 		productHandler.ProductRoutes(r)
+		cartHandler.CartRoutes(r)
 	})
 
 	srv := http.Server{

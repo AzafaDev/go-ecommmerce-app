@@ -11,17 +11,24 @@ import (
 )
 
 type Querier interface {
+	// Validates against the live product stock inside the same statement so a
+	// concurrent add for the same user/product can't push quantity over stock
+	// (the ON CONFLICT DO UPDATE branch takes the row lock before its WHERE
+	// check runs, so no external check-then-write step is needed).
+	AddCartItem(ctx context.Context, arg AddCartItemParams) (CartItem, error)
 	AdminCountProducts(ctx context.Context, arg AdminCountProductsParams) (int64, error)
 	AdminGetDistinctCategories(ctx context.Context) ([]string, error)
 	AdminGetProductByID(ctx context.Context, id pgtype.UUID) (Product, error)
 	AdminGetProductBySKU(ctx context.Context, sku string) (Product, error)
 	AdminListProducts(ctx context.Context, arg AdminListProductsParams) ([]Product, error)
+	ClearCart(ctx context.Context, userID pgtype.UUID) error
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateResetPasswordToken(ctx context.Context, arg CreateResetPasswordTokenParams) (PasswordResetToken, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateVericationEmail(ctx context.Context, arg CreateVericationEmailParams) (EmailVerificationToken, error)
+	DeleteCartItem(ctx context.Context, arg DeleteCartItemParams) (int64, error)
 	DeleteEmailVerificationByTokenHash(ctx context.Context, tokenHash string) error
 	DeletePasswordTokenByTokenHash(ctx context.Context, tokenHash string) error
 	GetDistinctCategories(ctx context.Context) ([]string, error)
@@ -32,11 +39,13 @@ type Querier interface {
 	GetResetPasswordTokenByTokenHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
+	ListCartItems(ctx context.Context, userID pgtype.UUID) ([]ListCartItemsRow, error)
 	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	RevokeRefreshTokenByUserID(ctx context.Context, userID pgtype.UUID) error
 	SetUserVerified(ctx context.Context, id pgtype.UUID) (User, error)
 	SoftDeleteProduct(ctx context.Context, id pgtype.UUID) (Product, error)
+	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (CartItem, error)
 	UpdatePasswordUser(ctx context.Context, arg UpdatePasswordUserParams) (User, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) (User, error)

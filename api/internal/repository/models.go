@@ -8,6 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type CartItem struct {
+	ID        pgtype.UUID
+	UserID    pgtype.UUID
+	ProductID pgtype.UUID
+	Quantity  int32
+	CreatedAt pgtype.Timestamptz
+	UpdatedAt pgtype.Timestamptz
+}
+
 type EmailVerificationToken struct {
 	ID        pgtype.UUID
 	UserID    pgtype.UUID
