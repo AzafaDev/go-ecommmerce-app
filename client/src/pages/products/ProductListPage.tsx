@@ -15,6 +15,7 @@ export function ProductListPage() {
   useEffect(() => {
     const timeout = setTimeout(() => {
       setSearchParams((prev) => {
+        if ((prev.get('search') ?? '') === searchInput) return prev
         const next = new URLSearchParams(prev)
         if (searchInput) next.set('search', searchInput)
         else next.delete('search')

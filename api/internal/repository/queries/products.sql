@@ -15,6 +15,10 @@ SELECT *
 FROM products
 WHERE id = $1
     AND is_active = true;
+-- name: AdminGetProductBySKU :one
+SELECT *
+FROM products
+WHERE sku = $1;
 -- name: AdminGetProductByID :one
 SELECT *
 FROM products

@@ -87,6 +87,31 @@ func (q *Queries) AdminGetProductByID(ctx context.Context, id pgtype.UUID) (Prod
 	return i, err
 }
 
+const adminGetProductBySKU = `-- name: AdminGetProductBySKU :one
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
+FROM products
+WHERE sku = $1
+`
+
+func (q *Queries) AdminGetProductBySKU(ctx context.Context, sku string) (Product, error) {
+	row := q.db.QueryRow(ctx, adminGetProductBySKU, sku)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Price,
+		&i.Stock,
+		&i.Sku,
+		&i.Category,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ImageUrl,
+	)
+	return i, err
+}
+
 const adminListProducts = `-- name: AdminListProducts :many
 SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
 FROM products

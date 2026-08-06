@@ -14,6 +14,7 @@ type Querier interface {
 	AdminCountProducts(ctx context.Context, arg AdminCountProductsParams) (int64, error)
 	AdminGetDistinctCategories(ctx context.Context) ([]string, error)
 	AdminGetProductByID(ctx context.Context, id pgtype.UUID) (Product, error)
+	AdminGetProductBySKU(ctx context.Context, sku string) (Product, error)
 	AdminListProducts(ctx context.Context, arg AdminListProductsParams) ([]Product, error)
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
