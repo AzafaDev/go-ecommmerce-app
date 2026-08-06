@@ -7,21 +7,23 @@ import (
 )
 
 type CreateProductRequest struct {
-	Name        string  `json:"name" validate:"required,min=3,max=255"`
-	Description string  `json:"description" validate:"max=2000"`
-	Price       float64 `json:"price" validate:"required,gt=0"`
-	Stock       int     `json:"stock" validate:"gte=0"`
-	SKU         string  `json:"sku" validate:"required,min=3,max=50"`
-	Category    string  `json:"category" validate:"required,max=100"`
+	Name        string `json:"name" validate:"required,min=3,max=255"`
+	Description string `json:"description" validate:"max=2000"`
+	Price       string `json:"price" validate:"required,price"`
+	Stock       int    `json:"stock" validate:"gte=0"`
+	SKU         string `json:"sku" validate:"required,min=3,max=50"`
+	Category    string `json:"category" validate:"required,max=100"`
+	ImageURL    string `json:"image_url" validate:"omitempty,url"`
 }
 
 type UpdateProductRequest struct {
-	Name        string  `json:"name" validate:"required,min=3,max=255"`
-	Description string  `json:"description" validate:"max=2000"`
-	Price       float64 `json:"price" validate:"required,gt=0"`
-	Stock       int     `json:"stock" validate:"gte=0"`
-	Category    string  `json:"category" validate:"required,max=100"`
-	IsActive    bool    `json:"is_active"`
+	Name        string `json:"name" validate:"required,min=3,max=255"`
+	Description string `json:"description" validate:"max=2000"`
+	Price       string `json:"price" validate:"required,price"`
+	Stock       int    `json:"stock" validate:"gte=0"`
+	Category    string `json:"category" validate:"required,max=100"`
+	IsActive    bool   `json:"is_active"`
+	ImageURL    string `json:"image_url" validate:"omitempty,url"`
 }
 
 type ProductResponse struct {
@@ -33,6 +35,7 @@ type ProductResponse struct {
 	SKU         string    `json:"sku"`
 	Category    string    `json:"category"`
 	IsActive    bool      `json:"is_active"`
+	ImageURL    string    `json:"image_url"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

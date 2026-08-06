@@ -10,20 +10,22 @@ export type ListProductsParams = {
 export type ProductInput = {
   name: string
   description: string
-  price: number
+  price: string
   stock: number
   sku: string
   category: string
+  image_url: string
 }
 
 // SKU is immutable after create — the API doesn't accept it on update.
 export type UpdateProductInput = {
   name: string
   description: string
-  price: number
+  price: string
   stock: number
   category: string
   is_active: boolean
+  image_url: string
 }
 
 function buildQuery(params: ListProductsParams) {

@@ -5,9 +5,10 @@ INSERT INTO products (
         price,
         stock,
         sku,
-        category
+        category,
+        image_url
     )
-VALUES ($1, $2, $3, $4, $5, $6)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING *;
 -- name: GetProductByID :one
 SELECT *
@@ -76,8 +77,9 @@ SET name = $1,
     stock = $4,
     category = $5,
     is_active = $6,
+    image_url = $7,
     updated_at = now()
-WHERE id = $7
+WHERE id = $8
 RETURNING *;
 -- name: SoftDeleteProduct :one
 UPDATE products

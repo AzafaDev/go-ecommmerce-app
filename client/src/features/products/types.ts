@@ -7,6 +7,7 @@ export type Product = {
   sku: string
   category: string
   is_active: boolean
+  image_url: string
   created_at: string
   updated_at: string
 }

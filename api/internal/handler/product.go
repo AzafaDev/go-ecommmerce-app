@@ -7,6 +7,7 @@ import (
 	"go-ecommerce-app/internal/model"
 	"go-ecommerce-app/internal/service"
 	"go-ecommerce-app/pkg/response"
+	"go-ecommerce-app/pkg/validation"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -26,7 +27,7 @@ func NewProductHandler(srv *service.ProductService, secretKey string) *ProductHa
 	return &ProductHandler{
 		srv:       srv,
 		secretKey: secretKey,
-		validate:  validator.New(),
+		validate:  validation.New(),
 	}
 }
 

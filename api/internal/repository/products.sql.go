@@ -63,7 +63,7 @@ func (q *Queries) AdminGetDistinctCategories(ctx context.Context) ([]string, err
 }
 
 const adminGetProductByID = `-- name: AdminGetProductByID :one
-SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
 FROM products
 WHERE id = $1
 `
@@ -82,12 +82,13 @@ func (q *Queries) AdminGetProductByID(ctx context.Context, id pgtype.UUID) (Prod
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ImageUrl,
 	)
 	return i, err
 }
 
 const adminListProducts = `-- name: AdminListProducts :many
-SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
 FROM products
 WHERE (
         $3::text IS NULL
@@ -133,6 +134,7 @@ func (q *Queries) AdminListProducts(ctx context.Context, arg AdminListProductsPa
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ImageUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -177,10 +179,11 @@ INSERT INTO products (
         price,
         stock,
         sku,
-        category
+        category,
+        image_url
     )
-VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, name, description, price, stock, sku, category, is_active, created_at, updated_at
+VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
 `
 
 type CreateProductParams struct {
@@ -190,6 +193,7 @@ type CreateProductParams struct {
 	Stock       int32
 	Sku         string
 	Category    string
+	ImageUrl    pgtype.Text
 }
 
 func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error) {
@@ -200,6 +204,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.Stock,
 		arg.Sku,
 		arg.Category,
+		arg.ImageUrl,
 	)
 	var i Product
 	err := row.Scan(
@@ -213,6 +218,7 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ImageUrl,
 	)
 	return i, err
 }
@@ -245,7 +251,7 @@ func (q *Queries) GetDistinctCategories(ctx context.Context) ([]string, error) {
 }
 
 const getProductByID = `-- name: GetProductByID :one
-SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
 FROM products
 WHERE id = $1
     AND is_active = true
@@ -265,12 +271,13 @@ func (q *Queries) GetProductByID(ctx context.Context, id pgtype.UUID) (Product, 
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ImageUrl,
 	)
 	return i, err
 }
 
 const listProducts = `-- name: ListProducts :many
-SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
 FROM products
 WHERE is_active = true
     AND (
@@ -317,6 +324,7 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 			&i.IsActive,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.ImageUrl,
 		); err != nil {
 			return nil, err
 		}
@@ -332,7 +340,7 @@ const softDeleteProduct = `-- name: SoftDeleteProduct :one
 UPDATE products
 SET is_active = false
 WHERE id = $1
-RETURNING id, name, description, price, stock, sku, category, is_active, created_at, updated_at
+RETURNING id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
 `
 
 func (q *Queries) SoftDeleteProduct(ctx context.Context, id pgtype.UUID) (Product, error) {
@@ -349,6 +357,7 @@ func (q *Queries) SoftDeleteProduct(ctx context.Context, id pgtype.UUID) (Produc
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ImageUrl,
 	)
 	return i, err
 }
@@ -361,9 +370,10 @@ SET name = $1,
     stock = $4,
     category = $5,
     is_active = $6,
+    image_url = $7,
     updated_at = now()
-WHERE id = $7
-RETURNING id, name, description, price, stock, sku, category, is_active, created_at, updated_at
+WHERE id = $8
+RETURNING id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
 `
 
 type UpdateProductParams struct {
@@ -373,6 +383,7 @@ type UpdateProductParams struct {
 	Stock       int32
 	Category    string
 	IsActive    bool
+	ImageUrl    pgtype.Text
 	ID          pgtype.UUID
 }
 
@@ -384,6 +395,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		arg.Stock,
 		arg.Category,
 		arg.IsActive,
+		arg.ImageUrl,
 		arg.ID,
 	)
 	var i Product
@@ -398,6 +410,7 @@ func (q *Queries) UpdateProduct(ctx context.Context, arg UpdateProductParams) (P
 		&i.IsActive,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.ImageUrl,
 	)
 	return i, err
 }

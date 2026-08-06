@@ -312,7 +312,7 @@ func TestProductHandler_ListCategories(t *testing.T) {
 func TestProductHandler_CreateProduct(t *testing.T) {
 	validPayload := model.CreateProductRequest{
 		Name:     "Kaos Polos",
-		Price:    19.99,
+		Price:    "19.99",
 		Stock:    10,
 		SKU:      "SKU-001",
 		Category: "apparel",
@@ -404,6 +404,36 @@ func TestProductHandler_CreateProduct(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, rec.Code)
 	})
+
+	t.Run("price with more than 2 decimal digits returns 400", func(t *testing.T) {
+		// Regression guard: this is the actual hardening gap — the API must
+		// reject imprecise prices instead of silently rounding them.
+		router, _ := newTestProductRouter(t)
+		payload := validPayload
+		payload.Price = "19.995"
+
+		req := newJSONRequest(t, http.MethodPost, "/products/", payload)
+		req.Header.Set("Authorization", "Bearer "+adminToken(t))
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+
+	t.Run("invalid image_url returns 400", func(t *testing.T) {
+		router, _ := newTestProductRouter(t)
+		payload := validPayload
+		payload.ImageURL = "not-a-url"
+
+		req := newJSONRequest(t, http.MethodPost, "/products/", payload)
+		req.Header.Set("Authorization", "Bearer "+adminToken(t))
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusBadRequest, rec.Code)
+	})
 }
 
 func TestProductHandler_UpdateProduct(t *testing.T) {
@@ -411,7 +441,7 @@ func TestProductHandler_UpdateProduct(t *testing.T) {
 	// has no SKU field, so it can't be sent even by a misbehaving client.
 	payload := model.UpdateProductRequest{
 		Name:     "Kaos Polos Updated",
-		Price:    24.5,
+		Price:    "24.5",
 		Stock:    5,
 		Category: "apparel",
 		IsActive: true,

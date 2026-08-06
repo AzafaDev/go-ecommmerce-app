@@ -4,6 +4,7 @@ import { DataRow } from '../../components/DataRow'
 import { Badge } from '../../components/Badge'
 import { useProduct } from '../../features/products/hooks'
 import { formatIDR } from '../../features/products/format'
+import { ProductImage } from './ProductImage'
 
 export function ProductDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -20,7 +21,12 @@ export function ProductDetailPage() {
   return (
     <div className="mx-auto max-w-xl">
       <Card eyebrow={product.category || 'go-commerce / product'}>
-        <div className="flex items-start justify-between gap-3">
+        <ProductImage
+          src={product.image_url}
+          alt={product.name}
+          className="h-64 w-full border-2 border-ink"
+        />
+        <div className="mt-6 flex items-start justify-between gap-3">
           <h1 className="text-[22px] font-extrabold text-ink">{product.name}</h1>
           {product.stock === 0 && <Badge variant="danger">Out of stock</Badge>}
         </div>

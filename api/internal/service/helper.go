@@ -29,3 +29,11 @@ func NumericToString(num pgtype.Numeric) string {
 	}
 	return str
 }
+
+func StringToNumeric(str string) (pgtype.Numeric, error) {
+	var num pgtype.Numeric
+	if err := num.Scan(str); err != nil {
+		return pgtype.Numeric{}, fmt.Errorf("invalid numeric value: %w", err)
+	}
+	return num, nil
+}

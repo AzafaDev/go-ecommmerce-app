@@ -26,16 +26,25 @@ func NewProductService(repo repository.Querier) *ProductService {
 func (s *ProductService) CreateProduct(ctx context.Context, req model.CreateProductRequest) (*model.ProductResponse, error) {
 	var pgErr *pgconn.PgError
 
+	numericPrice, err := StringToNumeric(req.Price)
+	if err != nil {
+		return nil, err
+	}
+
 	createdProduct, err := s.repo.CreateProduct(ctx, repository.CreateProductParams{
 		Name: req.Name,
 		Description: pgtype.Text{
 			String: req.Description,
 			Valid:  true,
 		},
-		Price:    Float64ToNumeric(req.Price),
+		Price:    numericPrice,
 		Stock:    int32(req.Stock),
 		Sku:      req.SKU,
 		Category: req.Category,
+		ImageUrl: pgtype.Text{
+			String: req.ImageURL,
+			Valid:  req.ImageURL != "",
+		},
 	})
 
 	if err != nil {
@@ -49,16 +58,25 @@ func (s *ProductService) CreateProduct(ctx context.Context, req model.CreateProd
 }
 
 func (s *ProductService) UpdateProduct(ctx context.Context, req model.UpdateProductRequest, id uuid.UUID) (*model.ProductResponse, error) {
+	numericPrice, err := StringToNumeric(req.Price)
+	if err != nil {
+		return nil, err
+	}
+
 	updatedProduct, err := s.repo.UpdateProduct(ctx, repository.UpdateProductParams{
 		Name: req.Name,
 		Description: pgtype.Text{
 			String: req.Description,
 			Valid:  true,
 		},
-		Price:    Float64ToNumeric(req.Price),
+		Price:    numericPrice,
 		Stock:    int32(req.Stock),
 		Category: req.Category,
 		IsActive: req.IsActive,
+		ImageUrl: pgtype.Text{
+			String: req.ImageURL,
+			Valid:  req.ImageURL != "",
+		},
 		ID: pgtype.UUID{
 			Bytes: id,
 			Valid: true,
@@ -215,6 +233,7 @@ func toProductResponse(p repository.Product) *model.ProductResponse {
 		SKU:         p.Sku,
 		Category:    p.Category,
 		IsActive:    p.IsActive,
+		ImageURL:    p.ImageUrl.String,
 		CreatedAt:   p.CreatedAt.Time,
 		UpdatedAt:   p.UpdatedAt.Time,
 	}

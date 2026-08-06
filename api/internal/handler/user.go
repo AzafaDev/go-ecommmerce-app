@@ -8,6 +8,7 @@ import (
 	"go-ecommerce-app/internal/model"
 	"go-ecommerce-app/internal/service"
 	"go-ecommerce-app/pkg/response"
+	"go-ecommerce-app/pkg/validation"
 	"log/slog"
 	"net/http"
 	"time"
@@ -31,7 +32,7 @@ type UserHandler struct {
 func NewUserHandler(srv *service.UserService, secret string, refreshTokenExpiry time.Duration, rdb *redis.Client, env string) *UserHandler {
 	return &UserHandler{
 		srv:                srv,
-		validate:           validator.New(),
+		validate:           validation.New(),
 		jwtSecretKey:       secret,
 		refreshTokenExpiry: refreshTokenExpiry,
 		rdb:                rdb,

@@ -37,6 +37,7 @@ type Product struct {
 	IsActive    bool
 	CreatedAt   pgtype.Timestamptz
 	UpdatedAt   pgtype.Timestamptz
+	ImageUrl    pgtype.Text
 }
 
 type RefreshToken struct {

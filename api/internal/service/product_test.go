@@ -39,6 +39,7 @@ func sampleProduct() repository.Product {
 		Stock:     10,
 		Sku:       "SKU-001",
 		Category:  "apparel",
+		ImageUrl:  pgtype.Text{String: "https://cdn.example.com/kaos.jpg", Valid: true},
 		IsActive:  true,
 		CreatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 		UpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
@@ -49,7 +50,7 @@ func TestProductService_CreateProduct(t *testing.T) {
 	req := model.CreateProductRequest{
 		Name:        "Kaos Polos",
 		Description: "Kaos katun combed 30s",
-		Price:       19.99,
+		Price:       "19.99",
 		Stock:       3,
 		SKU:         "SKU-001",
 		Category:    "apparel",
@@ -109,6 +110,35 @@ func TestProductService_CreateProduct(t *testing.T) {
 			assert.Equal(t, "SKU-001", product.SKU)
 		})
 	}
+
+	t.Run("empty image_url is forwarded as SQL NULL, not empty string", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		mockRepo.EXPECT().CreateProduct(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg repository.CreateProductParams) (repository.Product, error) {
+				assert.False(t, arg.ImageUrl.Valid, "empty image_url must be NULL")
+				return sampleProduct(), nil
+			})
+
+		_, err := svc.CreateProduct(context.Background(), req)
+
+		require.NoError(t, err)
+	})
+
+	t.Run("non-empty image_url is forwarded as-is", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		withImage := req
+		withImage.ImageURL = "https://cdn.example.com/kaos.jpg"
+
+		mockRepo.EXPECT().CreateProduct(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg repository.CreateProductParams) (repository.Product, error) {
+				assert.Equal(t, pgtype.Text{String: "https://cdn.example.com/kaos.jpg", Valid: true}, arg.ImageUrl)
+				return sampleProduct(), nil
+			})
+
+		_, err := svc.CreateProduct(context.Background(), withImage)
+
+		require.NoError(t, err)
+	})
 }
 
 func TestProductService_UpdateProduct(t *testing.T) {
@@ -116,7 +146,7 @@ func TestProductService_UpdateProduct(t *testing.T) {
 	// model.UpdateProductRequest has no SKU field to carry one anyway.
 	req := model.UpdateProductRequest{
 		Name:     "Kaos Polos Updated",
-		Price:    24.5,
+		Price:    "24.5",
 		Stock:    5,
 		Category: "apparel",
 		IsActive: true,
@@ -190,6 +220,37 @@ func TestProductService_UpdateProduct(t *testing.T) {
 		_, err := svc.UpdateProduct(context.Background(), req, id)
 		require.NoError(t, err)
 	})
+
+	t.Run("empty image_url means delete: forwarded as SQL NULL", func(t *testing.T) {
+		// Regression guard: PUT is full-replace, so image_url: "" must clear
+		// the image (Valid:false -> NULL), not persist an empty string.
+		svc, mockRepo := newTestProductService(t)
+		mockRepo.EXPECT().UpdateProduct(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg repository.UpdateProductParams) (repository.Product, error) {
+				assert.False(t, arg.ImageUrl.Valid, "empty image_url must be NULL")
+				return sampleProduct(), nil
+			})
+
+		_, err := svc.UpdateProduct(context.Background(), req, id)
+
+		require.NoError(t, err)
+	})
+
+	t.Run("non-empty image_url is forwarded as-is", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		withImage := req
+		withImage.ImageURL = "https://cdn.example.com/kaos.jpg"
+
+		mockRepo.EXPECT().UpdateProduct(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, arg repository.UpdateProductParams) (repository.Product, error) {
+				assert.Equal(t, pgtype.Text{String: "https://cdn.example.com/kaos.jpg", Valid: true}, arg.ImageUrl)
+				return sampleProduct(), nil
+			})
+
+		_, err := svc.UpdateProduct(context.Background(), withImage, id)
+
+		require.NoError(t, err)
+	})
 }
 
 func TestProductService_DeleteProduct(t *testing.T) {
@@ -236,6 +297,7 @@ func TestProductService_GetProductByID(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, product)
 		assert.Equal(t, "19.99", product.Price)
+		assert.Equal(t, "https://cdn.example.com/kaos.jpg", product.ImageURL)
 	})
 
 	t.Run("public: not found (also covers inactive product, filtered at query level)", func(t *testing.T) {

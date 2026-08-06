@@ -35,6 +35,7 @@ export function AdminProductFormPage() {
     formState: { errors, isSubmitting },
   } = useForm<ProductFormInput>({
     resolver: zodResolver(productSchema),
+    defaultValues: { image_url: '' },
   })
 
   const categoryValue = watch('category')
@@ -44,10 +45,11 @@ export function AdminProductFormPage() {
       reset({
         name: existing.product.name,
         description: existing.product.description,
-        price: Number(existing.product.price),
+        price: existing.product.price,
         stock: existing.product.stock,
         sku: existing.product.sku,
         category: existing.product.category,
+        image_url: existing.product.image_url,
       })
       setIsActive(existing.product.is_active)
     }
@@ -114,7 +116,7 @@ export function AdminProductFormPage() {
             <Field
               label="Price (IDR)"
               type="number"
-              step="1"
+              step="0.01"
               error={errors.price?.message}
               {...register('price')}
             />
@@ -132,6 +134,13 @@ export function AdminProductFormPage() {
             readOnly={isEditMode}
             hint={isEditMode ? 'SKU cannot be changed after a product is created.' : undefined}
             {...register('sku')}
+          />
+          <Field
+            label="Image URL"
+            placeholder="https://…"
+            hint={isEditMode ? 'Leave blank to remove the current image.' : 'Optional — paste a link to a hosted image.'}
+            error={errors.image_url?.message}
+            {...register('image_url')}
           />
 
           <div className="flex flex-col gap-1.5">
