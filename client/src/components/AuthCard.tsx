@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react'
+import { ArrowLeft } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Logo } from './Logo'
 import { Card } from './Card'
 
@@ -24,6 +26,16 @@ export function AuthCard({
   return (
     <div className="flex min-h-svh flex-col items-center justify-center bg-paper px-4 py-12">
       <div className="w-full max-w-[420px] animate-rise">
+        <div className="mb-4 flex justify-center">
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-[13px] font-bold text-ink-muted transition-colors hover:text-ink"
+          >
+            <ArrowLeft size={14} strokeWidth={2.5} />
+            Back to home
+          </Link>
+        </div>
+
         <div className="mb-7 flex justify-center">
           <Logo />
         </div>

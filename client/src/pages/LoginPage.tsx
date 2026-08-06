@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useForm } from 'react-hook-form'
+import { ShieldCheck, User } from 'lucide-react'
 import { AuthCard } from '../components/AuthCard'
 import { Field } from '../components/Input'
 import { Button } from '../components/Button'
@@ -16,6 +17,12 @@ type FormError = {
   unverified: boolean
 }
 
+// Seeded via `make seed` (api/cmd/seed) — safe to expose, demo data only.
+const DEMO_ACCOUNTS = {
+  customer: { email: 'customer1@go-commerce.local', password: 'password1234' },
+  admin: { email: 'admin@go-commerce.local', password: 'password1234' },
+} as const
+
 export function LoginPage() {
   const { login } = useAuth()
   const navigate = useNavigate()
@@ -23,6 +30,7 @@ export function LoginPage() {
   const resendVerification = useResendVerification()
 
   const [formError, setFormError] = useState<FormError | null>(null)
+  const [demoLoading, setDemoLoading] = useState<'customer' | 'admin' | null>(null)
 
   const passwordResetConfirmed = Boolean(
     (location.state as { passwordReset?: boolean } | null)?.passwordReset,
@@ -51,6 +59,19 @@ export function LoginPage() {
     }
   }
 
+  const handleDemoLogin = async (role: 'customer' | 'admin') => {
+    setFormError(null)
+    setDemoLoading(role)
+    try {
+      await login(DEMO_ACCOUNTS[role])
+      navigate(role === 'admin' ? '/admin/products' : '/profile', { replace: true })
+    } catch {
+      setFormError({ message: 'Demo login is unavailable right now.', unverified: false })
+    } finally {
+      setDemoLoading(null)
+    }
+  }
+
   return (
     <AuthCard
       eyebrow="go-commerce / sign in"
@@ -65,6 +86,46 @@ export function LoginPage() {
         </>
       }
     >
+      <div className="flex flex-col gap-3 rounded-2xl border-2 border-dashed border-ink/25 bg-paper px-4 py-4">
+        <p className="text-[13px] font-bold text-ink-muted">
+          Recruiter? Skip the form — jump in with a live demo account.
+        </p>
+        <div className="flex gap-2.5">
+          <button
+            type="button"
+            onClick={() => handleDemoLogin('customer')}
+            disabled={demoLoading !== null}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border-2 border-ink bg-white px-3 py-2.5 text-[13px] font-bold text-ink shadow-hard-sm transition-all hover:-translate-y-0.5 hover:bg-paper active:translate-x-[2px] active:translate-y-[2px] active:shadow-hard-press disabled:pointer-events-none disabled:opacity-60"
+          >
+            <User size={14} />
+            {demoLoading === 'customer' ? 'Signing in…' : 'Customer demo'}
+          </button>
+          <button
+            type="button"
+            onClick={() => handleDemoLogin('admin')}
+            disabled={demoLoading !== null}
+            className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border-2 border-ink bg-brand-600 px-3 py-2.5 text-[13px] font-bold text-white shadow-hard-sm transition-all hover:-translate-y-0.5 hover:bg-brand-700 active:translate-x-[2px] active:translate-y-[2px] active:shadow-hard-press disabled:pointer-events-none disabled:opacity-60"
+          >
+            <ShieldCheck size={14} />
+            {demoLoading === 'admin' ? 'Signing in…' : 'Admin demo'}
+          </button>
+        </div>
+        <p className="text-[11.5px] leading-relaxed text-ink-muted">
+          Both accounts use <span className="font-mono">password1234</span> — feel free to sign in
+          manually with{' '}
+          <span className="font-mono">{DEMO_ACCOUNTS.customer.email}</span> or{' '}
+          <span className="font-mono">{DEMO_ACCOUNTS.admin.email}</span> below too.
+        </p>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-line" />
+        <span className="text-[11px] font-bold uppercase tracking-wide text-ink-muted">
+          or sign in manually
+        </span>
+        <div className="h-px flex-1 bg-line" />
+      </div>
+
       <form className="flex flex-col gap-5" onSubmit={handleSubmit(onSubmit)} noValidate>
         {passwordResetConfirmed && !formError && (
           <Alert variant="success">

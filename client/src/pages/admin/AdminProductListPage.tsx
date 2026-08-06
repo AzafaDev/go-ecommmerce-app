@@ -4,15 +4,26 @@ import { Plus } from 'lucide-react'
 import { Field } from '../../components/Input'
 import { Badge } from '../../components/Badge'
 import { Pagination } from '../../components/Pagination'
-import { useAdminProducts, useDeleteProduct } from '../../features/products/hooks'
+import { CategoryChips } from '../../components/CategoryChips'
+import {
+  useAdminCategories,
+  useAdminProducts,
+  useDeleteProduct,
+} from '../../features/products/hooks'
 import { formatIDR } from '../../features/products/format'
 
 export function AdminProductListPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const search = searchParams.get('search') ?? ''
+  const category = searchParams.get('category') ?? ''
   const page = Number(searchParams.get('page') ?? '1')
 
-  const { data, isLoading } = useAdminProducts({ search: search || undefined, page })
+  const { data, isLoading } = useAdminProducts({
+    search: search || undefined,
+    category: category || undefined,
+    page,
+  })
+  const { data: categoriesData } = useAdminCategories()
   const deleteProduct = useDeleteProduct()
   const [confirmingId, setConfirmingId] = useState<string | null>(null)
 
@@ -29,6 +40,16 @@ export function AdminProductListPage() {
       const next = new URLSearchParams(prev)
       if (value) next.set('search', value)
       else next.delete('search')
+      next.delete('page')
+      return next
+    })
+  }
+
+  const handleCategoryChange = (nextCategory: string) => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (nextCategory) next.set('category', nextCategory)
+      else next.delete('category')
       next.delete('page')
       return next
     })
@@ -58,13 +79,23 @@ export function AdminProductListPage() {
         </Link>
       </div>
 
-      <div className="max-w-sm">
-        <Field
-          label="Search"
-          placeholder="Search products…"
-          defaultValue={search}
-          onChange={(e) => handleSearchChange(e.target.value)}
-        />
+      <div className="flex flex-col gap-4">
+        <div className="max-w-sm">
+          <Field
+            label="Search"
+            placeholder="Search products…"
+            defaultValue={search}
+            onChange={(e) => handleSearchChange(e.target.value)}
+          />
+        </div>
+
+        {categoriesData && categoriesData.categories.length > 0 && (
+          <CategoryChips
+            categories={categoriesData.categories}
+            value={category}
+            onChange={handleCategoryChange}
+          />
+        )}
       </div>
 
       {isLoading && <p className="text-[14px] text-ink-muted">Loading products…</p>}

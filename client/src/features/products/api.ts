@@ -3,6 +3,7 @@ import type { Product, ProductListMeta } from './types'
 
 export type ListProductsParams = {
   search?: string
+  category?: string
   page?: number
   limit?: number
 }
@@ -31,6 +32,7 @@ export type UpdateProductInput = {
 function buildQuery(params: ListProductsParams) {
   const query = new URLSearchParams()
   if (params.search) query.set('search', params.search)
+  if (params.category) query.set('category', params.category)
   if (params.page) query.set('page', String(params.page))
   if (params.limit) query.set('limit', String(params.limit))
   const qs = query.toString()

@@ -3,10 +3,12 @@ import { useAuth } from '../features/auth/auth-context'
 import { Splash } from './Splash'
 
 export function PublicOnlyRoute() {
-  const { isLoading, isAuthenticated } = useAuth()
+  const { isLoading, isAuthenticated, user } = useAuth()
 
   if (isLoading) return <Splash />
-  if (isAuthenticated) return <Navigate to="/profile" replace />
+  if (isAuthenticated) {
+    return <Navigate to={user?.role === 'admin' ? '/admin/products' : '/profile'} replace />
+  }
 
   return <Outlet />
 }
