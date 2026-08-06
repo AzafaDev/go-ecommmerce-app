@@ -70,6 +70,24 @@ func sampleRepoProduct(id pgtype.UUID) repository.Product {
 	}
 }
 
+func toListRow(p repository.Product, total int64) repository.ListProductsRow {
+	return repository.ListProductsRow{
+		ID: p.ID, Name: p.Name, Description: p.Description, Price: p.Price,
+		Stock: p.Stock, Sku: p.Sku, Category: p.Category, IsActive: p.IsActive,
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt, ImageUrl: p.ImageUrl,
+		TotalCount: total,
+	}
+}
+
+func toAdminListRow(p repository.Product, total int64) repository.AdminListProductsRow {
+	return repository.AdminListProductsRow{
+		ID: p.ID, Name: p.Name, Description: p.Description, Price: p.Price,
+		Stock: p.Stock, Sku: p.Sku, Category: p.Category, IsActive: p.IsActive,
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt, ImageUrl: p.ImageUrl,
+		TotalCount: total,
+	}
+}
+
 func TestProductHandler_GetProductByID(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		router, mockRepo := newTestProductRouter(t)
@@ -205,12 +223,11 @@ func TestProductHandler_ListProducts(t *testing.T) {
 		router, mockRepo := newTestProductRouter(t)
 
 		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ any, arg repository.ListProductsParams) ([]repository.Product, error) {
+			DoAndReturn(func(_ any, arg repository.ListProductsParams) ([]repository.ListProductsRow, error) {
 				assert.Equal(t, int32(10), arg.Limit)
 				assert.Equal(t, int32(0), arg.Offset)
-				return []repository.Product{sampleRepoProduct(pgtype.UUID{Bytes: uuid.New(), Valid: true})}, nil
+				return []repository.ListProductsRow{toListRow(sampleRepoProduct(pgtype.UUID{Bytes: uuid.New(), Valid: true}), 1)}, nil
 			})
-		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(1), nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/products/", nil)
 		rec := httptest.NewRecorder()
@@ -242,8 +259,7 @@ func TestProductHandler_AdminListProducts(t *testing.T) {
 		inactive := sampleRepoProduct(pgtype.UUID{Bytes: uuid.New(), Valid: true})
 		inactive.IsActive = false
 
-		mockRepo.EXPECT().AdminListProducts(gomock.Any(), gomock.Any()).Return([]repository.Product{inactive}, nil)
-		mockRepo.EXPECT().AdminCountProducts(gomock.Any(), gomock.Any()).Return(int64(1), nil)
+		mockRepo.EXPECT().AdminListProducts(gomock.Any(), gomock.Any()).Return([]repository.AdminListProductsRow{toAdminListRow(inactive, 1)}, nil)
 
 		req := httptest.NewRequest(http.MethodGet, "/admin/products/", nil)
 		req.Header.Set("Authorization", "Bearer "+adminToken(t))

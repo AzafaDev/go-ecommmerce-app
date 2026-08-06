@@ -12,36 +12,59 @@ import (
 )
 
 const addCartItem = `-- name: AddCartItem :one
-INSERT INTO cart_items (user_id, product_id, quantity)
-SELECT $1, $2, $3
-WHERE $3 <= (SELECT stock FROM products WHERE id = $2)
-ON CONFLICT (user_id, product_id)
-DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity,
-              updated_at = now()
-WHERE cart_items.quantity + EXCLUDED.quantity <= (SELECT stock FROM products WHERE id = EXCLUDED.product_id)
-RETURNING id, user_id, product_id, quantity, created_at, updated_at
+WITH target_product AS (
+    SELECT products.id, products.name, products.price, products.image_url, products.stock
+    FROM products
+    WHERE products.id = $1 AND products.is_active = true
+),
+upsert AS (
+    INSERT INTO cart_items (user_id, product_id, quantity)
+    SELECT $2, $1, $3
+    WHERE $3::int <= (SELECT stock FROM target_product)
+    ON CONFLICT (user_id, product_id)
+    DO UPDATE SET quantity = cart_items.quantity + EXCLUDED.quantity,
+                  updated_at = now()
+    WHERE cart_items.quantity + EXCLUDED.quantity <= (SELECT stock FROM target_product)
+    RETURNING quantity
+)
+SELECT
+    tp.id AS product_id,
+    tp.name,
+    tp.price,
+    tp.image_url,
+    u.quantity
+FROM target_product tp
+LEFT JOIN upsert u ON true
 `
 
 type AddCartItemParams struct {
-	UserID    pgtype.UUID
 	ProductID pgtype.UUID
+	UserID    pgtype.UUID
 	Quantity  int32
 }
 
-// Validates against the live product stock inside the same statement so a
-// concurrent add for the same user/product can't push quantity over stock
-// (the ON CONFLICT DO UPDATE branch takes the row lock before its WHERE
-// check runs, so no external check-then-write step is needed).
-func (q *Queries) AddCartItem(ctx context.Context, arg AddCartItemParams) (CartItem, error) {
-	row := q.db.QueryRow(ctx, addCartItem, arg.UserID, arg.ProductID, arg.Quantity)
-	var i CartItem
+type AddCartItemRow struct {
+	ProductID pgtype.UUID
+	Name      string
+	Price     pgtype.Numeric
+	ImageUrl  pgtype.Text
+	Quantity  pgtype.Int4
+}
+
+// Combines the product lookup (is_active/name/price/image for the response)
+// with the stock-guarded upsert in one round trip instead of two. Zero rows
+// back means the product doesn't exist or is inactive; a row with
+// quantity = NULL means the product exists but the upsert's stock guard
+// rejected the write (see AddCartItemParams.Quantity vs target_product.stock).
+func (q *Queries) AddCartItem(ctx context.Context, arg AddCartItemParams) (AddCartItemRow, error) {
+	row := q.db.QueryRow(ctx, addCartItem, arg.ProductID, arg.UserID, arg.Quantity)
+	var i AddCartItemRow
 	err := row.Scan(
-		&i.ID,
-		&i.UserID,
 		&i.ProductID,
+		&i.Name,
+		&i.Price,
+		&i.ImageUrl,
 		&i.Quantity,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }
@@ -132,30 +155,65 @@ func (q *Queries) ListCartItems(ctx context.Context, userID pgtype.UUID) ([]List
 }
 
 const updateCartItemQuantity = `-- name: UpdateCartItemQuantity :one
-UPDATE cart_items
-SET quantity = $1,
-    updated_at = now()
-WHERE user_id = $2
-    AND product_id = $3
-RETURNING id, user_id, product_id, quantity, created_at, updated_at
+WITH target_product AS (
+    SELECT products.id, products.name, products.price, products.image_url, products.stock
+    FROM products
+    WHERE products.id = $1 AND products.is_active = true
+),
+existing_item AS (
+    SELECT 1 AS found FROM cart_items
+    WHERE cart_items.user_id = $2 AND cart_items.product_id = $1
+),
+updated AS (
+    UPDATE cart_items
+    SET quantity = $3,
+        updated_at = now()
+    WHERE user_id = $2
+        AND product_id = $1
+        AND $3::int <= (SELECT stock FROM target_product)
+    RETURNING quantity
+)
+SELECT
+    tp.id AS product_id,
+    tp.name,
+    tp.price,
+    tp.image_url,
+    EXISTS (SELECT 1 FROM existing_item) AS item_exists,
+    u.quantity
+FROM target_product tp
+LEFT JOIN updated u ON true
 `
 
 type UpdateCartItemQuantityParams struct {
-	Quantity  int32
-	UserID    pgtype.UUID
 	ProductID pgtype.UUID
+	UserID    pgtype.UUID
+	Quantity  int32
 }
 
-func (q *Queries) UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (CartItem, error) {
-	row := q.db.QueryRow(ctx, updateCartItemQuantity, arg.Quantity, arg.UserID, arg.ProductID)
-	var i CartItem
+type UpdateCartItemQuantityRow struct {
+	ProductID  pgtype.UUID
+	Name       string
+	Price      pgtype.Numeric
+	ImageUrl   pgtype.Text
+	ItemExists bool
+	Quantity   pgtype.Int4
+}
+
+// Same idea as AddCartItem: one round trip instead of a product lookup plus
+// the update. Zero rows means the product doesn't exist or is inactive;
+// item_exists = false means there's no cart_items row for this user/product
+// yet; quantity = NULL (with item_exists = true) means the new quantity
+// exceeds stock, so the guarded UPDATE didn't apply.
+func (q *Queries) UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (UpdateCartItemQuantityRow, error) {
+	row := q.db.QueryRow(ctx, updateCartItemQuantity, arg.ProductID, arg.UserID, arg.Quantity)
+	var i UpdateCartItemQuantityRow
 	err := row.Scan(
-		&i.ID,
-		&i.UserID,
 		&i.ProductID,
+		&i.Name,
+		&i.Price,
+		&i.ImageUrl,
+		&i.ItemExists,
 		&i.Quantity,
-		&i.CreatedAt,
-		&i.UpdatedAt,
 	)
 	return i, err
 }

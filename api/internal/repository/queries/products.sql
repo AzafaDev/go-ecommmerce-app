@@ -24,7 +24,8 @@ SELECT *
 FROM products
 WHERE id = $1;
 -- name: ListProducts :many
-SELECT *
+-- total_count rides along via window function, avoiding a separate COUNT query.
+SELECT *, COUNT(*) OVER() AS total_count
 FROM products
 WHERE is_active = true
     AND (
@@ -38,7 +39,7 @@ WHERE is_active = true
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
 -- name: AdminListProducts :many
-SELECT *
+SELECT *, COUNT(*) OVER() AS total_count
 FROM products
 WHERE (
         sqlc.narg('search')::text IS NULL
@@ -51,6 +52,7 @@ WHERE (
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2;
 -- name: CountProducts :one
+-- Fallback for ListProducts when a page past the end returns no total_count row.
 SELECT COUNT(*)
 FROM products
 WHERE is_active = true
@@ -63,6 +65,7 @@ WHERE is_active = true
         OR category = sqlc.narg('category')::text
     );
 -- name: AdminCountProducts :one
+-- Fallback for AdminListProducts; see CountProducts.
 SELECT COUNT(*)
 FROM products
 WHERE (
@@ -90,6 +93,18 @@ UPDATE products
 SET is_active = false
 WHERE id = $1
 RETURNING *;
+-- name: DecrementProductStock :one
+UPDATE products
+SET stock = stock - $1,
+    updated_at = now()
+WHERE id = $2
+    AND stock >= $1
+RETURNING *;
+-- name: IncrementProductStock :exec
+UPDATE products
+SET stock = stock + $1,
+    updated_at = now()
+WHERE id = $2;
 -- name: GetDistinctCategories :many
 SELECT DISTINCT category
 FROM products

@@ -146,49 +146,58 @@ func (s *ProductService) ListProducts(ctx context.Context, search, category stri
 	searchParam := pgtype.Text{String: search, Valid: search != ""}
 	categoryParam := pgtype.Text{String: category, Valid: category != ""}
 
-	var listProducts []repository.Product
-	var totalItems int64
-	var err error
-
-	if includeInactive {
-		listProducts, err = s.repo.AdminListProducts(ctx, repository.AdminListProductsParams{
-			Limit:    int32(limit),
-			Offset:   int32(offset),
-			Search:   searchParam,
-			Category: categoryParam,
-		})
-	} else {
-		listProducts, err = s.repo.ListProducts(ctx, repository.ListProductsParams{
-			Limit:    int32(limit),
-			Offset:   int32(offset),
-			Search:   searchParam,
-			Category: categoryParam,
-		})
-	}
-
-	if err != nil {
-		return model.ListProductsResponse{}, fmt.Errorf("error in listing products: %w", err)
-	}
-
-	if includeInactive {
-		totalItems, err = s.repo.AdminCountProducts(ctx, repository.AdminCountProductsParams{
-			Search:   searchParam,
-			Category: categoryParam,
-		})
-	} else {
-		totalItems, err = s.repo.CountProducts(ctx, repository.CountProductsParams{
-			Search:   searchParam,
-			Category: categoryParam,
-		})
-	}
-
-	if err != nil {
-		return model.ListProductsResponse{}, fmt.Errorf("error in counting products: %w", err)
-	}
-
+	// Falls back to CountProducts only when rows come back empty (e.g. page past the end), since total_count then has no row to ride on.
 	listProductResponse := []model.ProductResponse{}
-	for _, p := range listProducts {
-		listProductResponse = append(listProductResponse, *toProductResponse(p))
+	var totalItems int64
+
+	if includeInactive {
+		rows, err := s.repo.AdminListProducts(ctx, repository.AdminListProductsParams{
+			Limit:    int32(limit),
+			Offset:   int32(offset),
+			Search:   searchParam,
+			Category: categoryParam,
+		})
+		if err != nil {
+			return model.ListProductsResponse{}, fmt.Errorf("error in listing products: %w", err)
+		}
+		for _, row := range rows {
+			listProductResponse = append(listProductResponse, *toProductResponse(adminListRowToProduct(row)))
+		}
+		if len(rows) > 0 {
+			totalItems = rows[0].TotalCount
+		} else {
+			totalItems, err = s.repo.AdminCountProducts(ctx, repository.AdminCountProductsParams{
+				Search:   searchParam,
+				Category: categoryParam,
+			})
+			if err != nil {
+				return model.ListProductsResponse{}, fmt.Errorf("error in counting products: %w", err)
+			}
+		}
+	} else {
+		rows, err := s.repo.ListProducts(ctx, repository.ListProductsParams{
+			Limit:    int32(limit),
+			Offset:   int32(offset),
+			Search:   searchParam,
+			Category: categoryParam,
+		})
+		if err != nil {
+			return model.ListProductsResponse{}, fmt.Errorf("error in listing products: %w", err)
+		}
+		for _, row := range rows {
+			listProductResponse = append(listProductResponse, *toProductResponse(listRowToProduct(row)))
+		}
+		if len(rows) > 0 {
+			totalItems = rows[0].TotalCount
+		} else {
+			totalItems, err = s.repo.CountProducts(ctx, repository.CountProductsParams{
+				Search:   searchParam,
+				Category: categoryParam,
+			})
+			if err != nil {
+				return model.ListProductsResponse{}, fmt.Errorf("error in counting products: %w", err)
+			}
+		}
 	}
 
 	return model.ListProductsResponse{
@@ -221,6 +230,38 @@ func (s *ProductService) ListCategories(ctx context.Context, includeInactive boo
 	}
 
 	return model.CategoriesResponse{Categories: categories}, nil
+}
+
+func listRowToProduct(r repository.ListProductsRow) repository.Product {
+	return repository.Product{
+		ID:          r.ID,
+		Name:        r.Name,
+		Description: r.Description,
+		Price:       r.Price,
+		Stock:       r.Stock,
+		Sku:         r.Sku,
+		Category:    r.Category,
+		IsActive:    r.IsActive,
+		CreatedAt:   r.CreatedAt,
+		UpdatedAt:   r.UpdatedAt,
+		ImageUrl:    r.ImageUrl,
+	}
+}
+
+func adminListRowToProduct(r repository.AdminListProductsRow) repository.Product {
+	return repository.Product{
+		ID:          r.ID,
+		Name:        r.Name,
+		Description: r.Description,
+		Price:       r.Price,
+		Stock:       r.Stock,
+		Sku:         r.Sku,
+		Category:    r.Category,
+		IsActive:    r.IsActive,
+		CreatedAt:   r.CreatedAt,
+		UpdatedAt:   r.UpdatedAt,
+		ImageUrl:    r.ImageUrl,
+	}
 }
 
 func toProductResponse(p repository.Product) *model.ProductResponse {

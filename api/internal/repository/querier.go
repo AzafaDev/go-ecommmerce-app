@@ -11,41 +11,64 @@ import (
 )
 
 type Querier interface {
-	// Validates against the live product stock inside the same statement so a
-	// concurrent add for the same user/product can't push quantity over stock
-	// (the ON CONFLICT DO UPDATE branch takes the row lock before its WHERE
-	// check runs, so no external check-then-write step is needed).
-	AddCartItem(ctx context.Context, arg AddCartItemParams) (CartItem, error)
+	// Combines the product lookup (is_active/name/price/image for the response)
+	// with the stock-guarded upsert in one round trip instead of two. Zero rows
+	// back means the product doesn't exist or is inactive; a row with
+	// quantity = NULL means the product exists but the upsert's stock guard
+	// rejected the write (see AddCartItemParams.Quantity vs target_product.stock).
+	AddCartItem(ctx context.Context, arg AddCartItemParams) (AddCartItemRow, error)
+	// Fallback for AdminListProducts; see CountProducts.
 	AdminCountProducts(ctx context.Context, arg AdminCountProductsParams) (int64, error)
 	AdminGetDistinctCategories(ctx context.Context) ([]string, error)
 	AdminGetProductByID(ctx context.Context, id pgtype.UUID) (Product, error)
 	AdminGetProductBySKU(ctx context.Context, sku string) (Product, error)
-	AdminListProducts(ctx context.Context, arg AdminListProductsParams) ([]Product, error)
+	AdminListProducts(ctx context.Context, arg AdminListProductsParams) ([]AdminListProductsRow, error)
 	ClearCart(ctx context.Context, userID pgtype.UUID) error
+	// Fallback for ListProducts when the page/offset lands past the end of the
+	// result set: zero rows come back, so COUNT(*) OVER() has nothing to ride
+	// on. Only called in that case, not on every listing.
 	CountProducts(ctx context.Context, arg CountProductsParams) (int64, error)
+	CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error)
+	CreateOrderItem(ctx context.Context, arg CreateOrderItemParams) (OrderItem, error)
 	CreateProduct(ctx context.Context, arg CreateProductParams) (Product, error)
 	CreateRefreshToken(ctx context.Context, arg CreateRefreshTokenParams) error
 	CreateResetPasswordToken(ctx context.Context, arg CreateResetPasswordTokenParams) (PasswordResetToken, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateVericationEmail(ctx context.Context, arg CreateVericationEmailParams) (EmailVerificationToken, error)
+	DecrementProductStock(ctx context.Context, arg DecrementProductStockParams) (Product, error)
 	DeleteCartItem(ctx context.Context, arg DeleteCartItemParams) (int64, error)
 	DeleteEmailVerificationByTokenHash(ctx context.Context, tokenHash string) error
 	DeletePasswordTokenByTokenHash(ctx context.Context, tokenHash string) error
 	GetDistinctCategories(ctx context.Context) ([]string, error)
 	GetEmailVerificationByTokenHash(ctx context.Context, tokenHash string) (EmailVerificationToken, error)
+	GetOrderByID(ctx context.Context, id pgtype.UUID) (Order, error)
+	GetOrderByMidtransID(ctx context.Context, midtransOrderID pgtype.Text) (Order, error)
 	GetProductByID(ctx context.Context, id pgtype.UUID) (Product, error)
 	GetRefreshToken(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetRefreshTokenAnyStatus(ctx context.Context, tokenHash string) (RefreshToken, error)
 	GetResetPasswordTokenByTokenHash(ctx context.Context, tokenHash string) (PasswordResetToken, error)
 	GetUserByEmail(ctx context.Context, email string) (User, error)
 	GetUserByID(ctx context.Context, id pgtype.UUID) (User, error)
+	IncrementProductStock(ctx context.Context, arg IncrementProductStockParams) error
 	ListCartItems(ctx context.Context, userID pgtype.UUID) ([]ListCartItemsRow, error)
-	ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error)
+	ListExpiredPendingOrders(ctx context.Context, createdAt pgtype.Timestamptz) ([]Order, error)
+	ListOrderItemsByOrder(ctx context.Context, orderID pgtype.UUID) ([]OrderItem, error)
+	ListOrdersByUser(ctx context.Context, userID pgtype.UUID) ([]Order, error)
+	// total_count carries the full matching row count on every row via a window
+	// function, so the caller gets pagination totals without a second query.
+	ListProducts(ctx context.Context, arg ListProductsParams) ([]ListProductsRow, error)
 	RevokeRefreshToken(ctx context.Context, tokenHash string) error
 	RevokeRefreshTokenByUserID(ctx context.Context, userID pgtype.UUID) error
+	SetOrderPaymentInfo(ctx context.Context, arg SetOrderPaymentInfoParams) (Order, error)
 	SetUserVerified(ctx context.Context, id pgtype.UUID) (User, error)
 	SoftDeleteProduct(ctx context.Context, id pgtype.UUID) (Product, error)
-	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (CartItem, error)
+	// Same idea as AddCartItem: one round trip instead of a product lookup plus
+	// the update. Zero rows means the product doesn't exist or is inactive;
+	// item_exists = false means there's no cart_items row for this user/product
+	// yet; quantity = NULL (with item_exists = true) means the new quantity
+	// exceeds stock, so the guarded UPDATE didn't apply.
+	UpdateCartItemQuantity(ctx context.Context, arg UpdateCartItemQuantityParams) (UpdateCartItemQuantityRow, error)
+	UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusParams) (Order, error)
 	UpdatePasswordUser(ctx context.Context, arg UpdatePasswordUserParams) (User, error)
 	UpdateProduct(ctx context.Context, arg UpdateProductParams) (Product, error)
 	UpdateUserRole(ctx context.Context, arg UpdateUserRoleParams) (User, error)

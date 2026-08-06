@@ -336,6 +336,24 @@ func TestProductService_GetProductByID(t *testing.T) {
 	})
 }
 
+func toListRow(p repository.Product, total int64) repository.ListProductsRow {
+	return repository.ListProductsRow{
+		ID: p.ID, Name: p.Name, Description: p.Description, Price: p.Price,
+		Stock: p.Stock, Sku: p.Sku, Category: p.Category, IsActive: p.IsActive,
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt, ImageUrl: p.ImageUrl,
+		TotalCount: total,
+	}
+}
+
+func toAdminListRow(p repository.Product, total int64) repository.AdminListProductsRow {
+	return repository.AdminListProductsRow{
+		ID: p.ID, Name: p.Name, Description: p.Description, Price: p.Price,
+		Stock: p.Stock, Sku: p.Sku, Category: p.Category, IsActive: p.IsActive,
+		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt, ImageUrl: p.ImageUrl,
+		TotalCount: total,
+	}
+}
+
 func TestProductService_ListProducts(t *testing.T) {
 	t.Run("empty search/category must reach the repo as NULL, not empty-string", func(t *testing.T) {
 		// Regression guard: Valid:true with an empty string turns the SQL
@@ -344,16 +362,10 @@ func TestProductService_ListProducts(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 
 		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.Product, error) {
+			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.ListProductsRow, error) {
 				assert.False(t, arg.Search.Valid, "empty search must be NULL")
 				assert.False(t, arg.Category.Valid, "empty category must be NULL")
-				return []repository.Product{sampleProduct()}, nil
-			})
-		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg repository.CountProductsParams) (int64, error) {
-				assert.False(t, arg.Search.Valid)
-				assert.False(t, arg.Category.Valid)
-				return 1, nil
+				return []repository.ListProductsRow{toListRow(sampleProduct(), 1)}, nil
 			})
 
 		res, err := svc.ListProducts(context.Background(), "", "", 1, 10, false)
@@ -366,10 +378,10 @@ func TestProductService_ListProducts(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 
 		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.Product, error) {
+			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.ListProductsRow, error) {
 				assert.Equal(t, pgtype.Text{String: "kaos", Valid: true}, arg.Search)
 				assert.Equal(t, pgtype.Text{String: "apparel", Valid: true}, arg.Category)
-				return []repository.Product{}, nil
+				return []repository.ListProductsRow{}, nil
 			})
 		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
 
@@ -384,9 +396,9 @@ func TestProductService_ListProducts(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 
 		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.Product, error) {
+			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.ListProductsRow, error) {
 				assert.Equal(t, int32(0), arg.Offset)
-				return []repository.Product{}, nil
+				return []repository.ListProductsRow{}, nil
 			})
 		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
 
@@ -400,9 +412,9 @@ func TestProductService_ListProducts(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 
 		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.Product, error) {
+			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.ListProductsRow, error) {
 				assert.Equal(t, int32(10), arg.Limit)
-				return []repository.Product{}, nil
+				return []repository.ListProductsRow{}, nil
 			})
 		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
 
@@ -418,9 +430,9 @@ func TestProductService_ListProducts(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 
 		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.Product, error) {
+			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.ListProductsRow, error) {
 				assert.Equal(t, int32(100), arg.Limit)
-				return []repository.Product{}, nil
+				return []repository.ListProductsRow{}, nil
 			})
 		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
 
@@ -434,9 +446,9 @@ func TestProductService_ListProducts(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 
 		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.Product, error) {
+			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.ListProductsRow, error) {
 				assert.Equal(t, int32(100), arg.Limit)
-				return []repository.Product{}, nil
+				return []repository.ListProductsRow{}, nil
 			})
 		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
 
@@ -446,15 +458,16 @@ func TestProductService_ListProducts(t *testing.T) {
 		assert.Equal(t, 100, res.Meta.Limit)
 	})
 
-	t.Run("pagination metadata is computed from total items", func(t *testing.T) {
+	t.Run("pagination metadata is computed from total_count on the returned rows, no fallback count needed", func(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 
 		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.Product, error) {
+			DoAndReturn(func(_ context.Context, arg repository.ListProductsParams) ([]repository.ListProductsRow, error) {
 				assert.Equal(t, int32(5), arg.Offset) // page 2, limit 5 -> offset 5
-				return []repository.Product{}, nil
+				return []repository.ListProductsRow{toListRow(sampleProduct(), 23)}, nil
 			})
-		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(23), nil)
+		// CountProducts deliberately NOT EXPECT()'d: total_count already rode
+		// along on the row, so no fallback query should fire.
 
 		res, err := svc.ListProducts(context.Background(), "", "", 2, 5, false)
 
@@ -463,6 +476,34 @@ func TestProductService_ListProducts(t *testing.T) {
 		assert.Equal(t, 5, res.Meta.Limit)
 		assert.Equal(t, 23, res.Meta.TotalItems)
 		assert.Equal(t, 5, res.Meta.TotalPages)
+	})
+
+	t.Run("no matching rows at all falls back to CountProducts, which also reports zero", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).Return([]repository.ListProductsRow{}, nil)
+		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), nil)
+
+		res, err := svc.ListProducts(context.Background(), "", "", 1, 10, false)
+
+		require.NoError(t, err)
+		assert.Equal(t, 0, res.Meta.TotalItems)
+	})
+
+	t.Run("page past the end of the results falls back to CountProducts for the true total", func(t *testing.T) {
+		// Regression guard: matches exist (23 of them), but page 5 at
+		// limit 10 is past the end, so ListProducts returns zero rows and
+		// there's no row to carry total_count. Without the fallback, this
+		// would incorrectly report TotalItems = 0 instead of 23.
+		svc, mockRepo := newTestProductService(t)
+		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).Return([]repository.ListProductsRow{}, nil)
+		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(23), nil)
+
+		res, err := svc.ListProducts(context.Background(), "", "", 5, 10, false)
+
+		require.NoError(t, err)
+		assert.Empty(t, res.Data)
+		assert.Equal(t, 23, res.Meta.TotalItems)
+		assert.Equal(t, 3, res.Meta.TotalPages)
 	})
 
 	t.Run("list error is propagated", func(t *testing.T) {
@@ -475,9 +516,9 @@ func TestProductService_ListProducts(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("count error is propagated", func(t *testing.T) {
+	t.Run("fallback count error is propagated", func(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
-		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).Return([]repository.Product{}, nil)
+		mockRepo.EXPECT().ListProducts(gomock.Any(), gomock.Any()).Return([]repository.ListProductsRow{}, nil)
 		mockRepo.EXPECT().CountProducts(gomock.Any(), gomock.Any()).Return(int64(0), errors.New("connection reset"))
 
 		_, err := svc.ListProducts(context.Background(), "", "", 1, 10, false)
@@ -485,13 +526,12 @@ func TestProductService_ListProducts(t *testing.T) {
 		assert.Error(t, err)
 	})
 
-	t.Run("includeInactive=true routes to the admin queries", func(t *testing.T) {
+	t.Run("includeInactive=true routes to the admin query", func(t *testing.T) {
 		svc, mockRepo := newTestProductService(t)
 		inactive := sampleProduct()
 		inactive.IsActive = false
 
-		mockRepo.EXPECT().AdminListProducts(gomock.Any(), gomock.Any()).Return([]repository.Product{inactive}, nil)
-		mockRepo.EXPECT().AdminCountProducts(gomock.Any(), gomock.Any()).Return(int64(1), nil)
+		mockRepo.EXPECT().AdminListProducts(gomock.Any(), gomock.Any()).Return([]repository.AdminListProductsRow{toAdminListRow(inactive, 1)}, nil)
 		// The public ListProducts/CountProducts must NOT be called on the admin path.
 
 		res, err := svc.ListProducts(context.Background(), "", "", 1, 10, true)
@@ -499,6 +539,18 @@ func TestProductService_ListProducts(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, res.Data, 1)
 		assert.False(t, res.Data[0].IsActive)
+		assert.Equal(t, 1, res.Meta.TotalItems)
+	})
+
+	t.Run("includeInactive=true page past the end falls back to AdminCountProducts", func(t *testing.T) {
+		svc, mockRepo := newTestProductService(t)
+		mockRepo.EXPECT().AdminListProducts(gomock.Any(), gomock.Any()).Return([]repository.AdminListProductsRow{}, nil)
+		mockRepo.EXPECT().AdminCountProducts(gomock.Any(), gomock.Any()).Return(int64(7), nil)
+
+		res, err := svc.ListProducts(context.Background(), "", "", 5, 10, true)
+
+		require.NoError(t, err)
+		assert.Equal(t, 7, res.Meta.TotalItems)
 	})
 }
 

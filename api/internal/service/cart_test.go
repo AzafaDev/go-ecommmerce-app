@@ -26,31 +26,46 @@ func newTestCartService(t *testing.T) (*service.CartService, *repomocks.MockQuer
 	return svc, mockRepo
 }
 
-func sampleCartProduct(id pgtype.UUID) repository.Product {
-	return repository.Product{
-		ID:       id,
-		Name:     "Kaos Polos",
-		Price:    service.Float64ToNumeric(19.99),
-		Stock:    10,
-		Sku:      "SKU-001",
-		Category: "apparel",
-		ImageUrl: pgtype.Text{String: "https://cdn.example.com/kaos.jpg", Valid: true},
-		IsActive: true,
+// Quantity is only valid when the upsert's stock guard let the write through.
+func sampleAddCartItemRow(productID pgtype.UUID, quantity int32, stockOK bool) repository.AddCartItemRow {
+	row := repository.AddCartItemRow{
+		ProductID: productID,
+		Name:      "Kaos Polos",
+		Price:     service.Float64ToNumeric(19.99),
+		ImageUrl:  pgtype.Text{String: "https://cdn.example.com/kaos.jpg", Valid: true},
 	}
+	if stockOK {
+		row.Quantity = pgtype.Int4{Int32: quantity, Valid: true}
+	}
+	return row
+}
+
+// Quantity is only valid when itemExists and the guarded UPDATE applied.
+func sampleUpdateCartItemQuantityRow(productID pgtype.UUID, quantity int32, itemExists, stockOK bool) repository.UpdateCartItemQuantityRow {
+	row := repository.UpdateCartItemQuantityRow{
+		ProductID:  productID,
+		Name:       "Kaos Polos",
+		Price:      service.Float64ToNumeric(19.99),
+		ImageUrl:   pgtype.Text{String: "https://cdn.example.com/kaos.jpg", Valid: true},
+		ItemExists: itemExists,
+	}
+	if itemExists && stockOK {
+		row.Quantity = pgtype.Int4{Int32: quantity, Valid: true}
+	}
+	return row
 }
 
 func TestCartService_AddItem(t *testing.T) {
 	userID := uuid.New()
 	productID := uuid.New()
+	pgProductID := pgtype.UUID{Bytes: productID, Valid: true}
 	req := model.AddCartItemRequest{ProductID: productID, Quantity: 2}
 
 	t.Run("active product with enough stock succeeds", func(t *testing.T) {
 		svc, mockRepo := newTestCartService(t)
-		product := sampleCartProduct(pgtype.UUID{Bytes: productID, Valid: true})
 
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(product, nil)
 		mockRepo.EXPECT().AddCartItem(gomock.Any(), gomock.Any()).
-			Return(repository.CartItem{ProductID: pgtype.UUID{Bytes: productID, Valid: true}, Quantity: 2}, nil)
+			Return(sampleAddCartItemRow(pgProductID, 2, true), nil)
 
 		item, err := svc.AddItem(context.Background(), userID, req)
 
@@ -62,16 +77,14 @@ func TestCartService_AddItem(t *testing.T) {
 
 	t.Run("product already in cart accumulates quantity instead of replacing it", func(t *testing.T) {
 		svc, mockRepo := newTestCartService(t)
-		product := sampleCartProduct(pgtype.UUID{Bytes: productID, Valid: true})
 
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(product, nil)
 		mockRepo.EXPECT().AddCartItem(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg repository.AddCartItemParams) (repository.CartItem, error) {
+			DoAndReturn(func(_ context.Context, arg repository.AddCartItemParams) (repository.AddCartItemRow, error) {
 				// The upsert itself is responsible for the actual accumulation in SQL;
 				// here we only verify the requested quantity is forwarded as-is (2),
 				// not pre-summed with the existing 3 in Go.
 				assert.Equal(t, int32(2), arg.Quantity)
-				return repository.CartItem{ProductID: arg.ProductID, Quantity: 5}, nil
+				return sampleAddCartItemRow(arg.ProductID, 5, true), nil
 			})
 
 		item, err := svc.AddItem(context.Background(), userID, req)
@@ -83,7 +96,9 @@ func TestCartService_AddItem(t *testing.T) {
 
 	t.Run("product not found or inactive returns ErrProductNotFound", func(t *testing.T) {
 		svc, mockRepo := newTestCartService(t)
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(repository.Product{}, pgx.ErrNoRows)
+		// The merged query's target_product CTE finds nothing, so the whole
+		// statement returns zero rows.
+		mockRepo.EXPECT().AddCartItem(gomock.Any(), gomock.Any()).Return(repository.AddCartItemRow{}, pgx.ErrNoRows)
 
 		item, err := svc.AddItem(context.Background(), userID, req)
 
@@ -91,16 +106,12 @@ func TestCartService_AddItem(t *testing.T) {
 		assert.Nil(t, item)
 	})
 
-	t.Run("insufficient stock reported by the atomic upsert returns ErrInsufficientStock", func(t *testing.T) {
+	t.Run("insufficient stock reported by the guarded upsert returns ErrInsufficientStock", func(t *testing.T) {
 		svc, mockRepo := newTestCartService(t)
-		product := sampleCartProduct(pgtype.UUID{Bytes: productID, Valid: true})
-		product.Stock = 3
-
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(product, nil)
-		// The AddCartItem query's WHERE guard rejects the write and RETURNING
-		// yields no rows, surfaced here as pgx.ErrNoRows.
+		// Product exists (a row comes back), but the upsert's WHERE guard
+		// rejected the write, so Quantity comes back NULL via the LEFT JOIN.
 		mockRepo.EXPECT().AddCartItem(gomock.Any(), gomock.Any()).
-			Return(repository.CartItem{}, pgx.ErrNoRows)
+			Return(sampleAddCartItemRow(pgProductID, 0, false), nil)
 
 		item, err := svc.AddItem(context.Background(), userID, req)
 
@@ -110,11 +121,9 @@ func TestCartService_AddItem(t *testing.T) {
 
 	t.Run("unexpected error from AddCartItem is propagated", func(t *testing.T) {
 		svc, mockRepo := newTestCartService(t)
-		product := sampleCartProduct(pgtype.UUID{Bytes: productID, Valid: true})
 
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(product, nil)
 		mockRepo.EXPECT().AddCartItem(gomock.Any(), gomock.Any()).
-			Return(repository.CartItem{}, errors.New("connection reset"))
+			Return(repository.AddCartItemRow{}, errors.New("connection reset"))
 
 		item, err := svc.AddItem(context.Background(), userID, req)
 
@@ -126,14 +135,14 @@ func TestCartService_AddItem(t *testing.T) {
 func TestCartService_UpdateItemQuantity(t *testing.T) {
 	userID := uuid.New()
 	productID := uuid.New()
+	pgProductID := pgtype.UUID{Bytes: productID, Valid: true}
 
 	t.Run("item not in cart returns ErrCartItemNotFound", func(t *testing.T) {
 		svc, mockRepo := newTestCartService(t)
-		product := sampleCartProduct(pgtype.UUID{Bytes: productID, Valid: true})
-
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(product, nil)
+		// Product exists and is active, but there's no cart_items row for
+		// this user/product yet.
 		mockRepo.EXPECT().UpdateCartItemQuantity(gomock.Any(), gomock.Any()).
-			Return(repository.CartItem{}, pgx.ErrNoRows)
+			Return(sampleUpdateCartItemQuantityRow(pgProductID, 0, false, false), nil)
 
 		item, err := svc.UpdateItemQuantity(context.Background(), userID, productID, 2)
 
@@ -143,11 +152,10 @@ func TestCartService_UpdateItemQuantity(t *testing.T) {
 
 	t.Run("new quantity exceeding stock returns ErrInsufficientStock", func(t *testing.T) {
 		svc, mockRepo := newTestCartService(t)
-		product := sampleCartProduct(pgtype.UUID{Bytes: productID, Valid: true})
-		product.Stock = 3
-
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(product, nil)
-		// UpdateCartItemQuantity deliberately NOT EXPECT()'d: must short-circuit before writing.
+		// The cart item exists, but the guarded UPDATE's WHERE rejected the
+		// write, so Quantity comes back NULL via the LEFT JOIN.
+		mockRepo.EXPECT().UpdateCartItemQuantity(gomock.Any(), gomock.Any()).
+			Return(sampleUpdateCartItemQuantityRow(pgProductID, 0, true, false), nil)
 
 		item, err := svc.UpdateItemQuantity(context.Background(), userID, productID, 5)
 
@@ -157,7 +165,8 @@ func TestCartService_UpdateItemQuantity(t *testing.T) {
 
 	t.Run("product not found returns ErrProductNotFound", func(t *testing.T) {
 		svc, mockRepo := newTestCartService(t)
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(repository.Product{}, pgx.ErrNoRows)
+		mockRepo.EXPECT().UpdateCartItemQuantity(gomock.Any(), gomock.Any()).
+			Return(repository.UpdateCartItemQuantityRow{}, pgx.ErrNoRows)
 
 		item, err := svc.UpdateItemQuantity(context.Background(), userID, productID, 2)
 
@@ -167,13 +176,11 @@ func TestCartService_UpdateItemQuantity(t *testing.T) {
 
 	t.Run("success sets quantity absolutely", func(t *testing.T) {
 		svc, mockRepo := newTestCartService(t)
-		product := sampleCartProduct(pgtype.UUID{Bytes: productID, Valid: true})
 
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(product, nil)
 		mockRepo.EXPECT().UpdateCartItemQuantity(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, arg repository.UpdateCartItemQuantityParams) (repository.CartItem, error) {
+			DoAndReturn(func(_ context.Context, arg repository.UpdateCartItemQuantityParams) (repository.UpdateCartItemQuantityRow, error) {
 				assert.Equal(t, int32(7), arg.Quantity)
-				return repository.CartItem{ProductID: arg.ProductID, Quantity: arg.Quantity}, nil
+				return sampleUpdateCartItemQuantityRow(arg.ProductID, arg.Quantity, true, true), nil
 			})
 
 		item, err := svc.UpdateItemQuantity(context.Background(), userID, productID, 7)

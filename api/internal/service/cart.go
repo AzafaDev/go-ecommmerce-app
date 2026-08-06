@@ -28,60 +28,47 @@ func (s *CartService) AddItem(ctx context.Context, userID uuid.UUID, req model.A
 	pgUserID := pgtype.UUID{Bytes: userID, Valid: true}
 	pgProductID := pgtype.UUID{Bytes: req.ProductID, Valid: true}
 
-	product, err := s.repo.GetProductByID(ctx, pgProductID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrProductNotFound
-		}
-		return nil, fmt.Errorf("error in getting product by id: %w", err)
-	}
-
-	// Stock is validated inside the AddCartItem query itself (against the
-	// existing row under lock), so no separate lookup+check is needed here.
-	cartItem, err := s.repo.AddCartItem(ctx, repository.AddCartItemParams{
+	row, err := s.repo.AddCartItem(ctx, repository.AddCartItemParams{
 		UserID:    pgUserID,
 		ProductID: pgProductID,
 		Quantity:  int32(req.Quantity),
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrInsufficientStock
+			return nil, ErrProductNotFound
 		}
 		return nil, fmt.Errorf("error in adding cart item: %w", err)
 	}
+	if !row.Quantity.Valid {
+		return nil, ErrInsufficientStock
+	}
 
-	return toCartItemResponse(req.ProductID, product, cartItem.Quantity), nil
+	return toCartItemResponse(req.ProductID, row.Name, row.Price, row.ImageUrl, row.Quantity.Int32), nil
 }
 
 func (s *CartService) UpdateItemQuantity(ctx context.Context, userID, productID uuid.UUID, quantity int) (*model.CartItemResponse, error) {
 	pgUserID := pgtype.UUID{Bytes: userID, Valid: true}
 	pgProductID := pgtype.UUID{Bytes: productID, Valid: true}
 
-	product, err := s.repo.GetProductByID(ctx, pgProductID)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrProductNotFound
-		}
-		return nil, fmt.Errorf("error in getting product by id: %w", err)
-	}
-
-	if int32(quantity) > product.Stock {
-		return nil, ErrInsufficientStock
-	}
-
-	cartItem, err := s.repo.UpdateCartItemQuantity(ctx, repository.UpdateCartItemQuantityParams{
+	row, err := s.repo.UpdateCartItemQuantity(ctx, repository.UpdateCartItemQuantityParams{
 		Quantity:  int32(quantity),
 		UserID:    pgUserID,
 		ProductID: pgProductID,
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, ErrCartItemNotFound
+			return nil, ErrProductNotFound
 		}
 		return nil, fmt.Errorf("error in updating cart item quantity: %w", err)
 	}
+	if !row.ItemExists {
+		return nil, ErrCartItemNotFound
+	}
+	if !row.Quantity.Valid {
+		return nil, ErrInsufficientStock
+	}
 
-	return toCartItemResponse(productID, product, cartItem.Quantity), nil
+	return toCartItemResponse(productID, row.Name, row.Price, row.ImageUrl, row.Quantity.Int32), nil
 }
 
 func (s *CartService) RemoveItem(ctx context.Context, userID, productID uuid.UUID) error {
@@ -137,58 +124,15 @@ func (s *CartService) GetCart(ctx context.Context, userID uuid.UUID) (*model.Car
 	}, nil
 }
 
-// multiplyNumericByInt multiplies a NUMERIC by an integer factor without
-// going through float64, preserving exact decimal precision for money math.
-func multiplyNumericByInt(n pgtype.Numeric, factor int32) pgtype.Numeric {
-	if !n.Valid || n.Int == nil {
-		return pgtype.Numeric{Int: big.NewInt(0), Valid: true}
-	}
-	return pgtype.Numeric{
-		Int:   new(big.Int).Mul(n.Int, big.NewInt(int64(factor))),
-		Exp:   n.Exp,
-		Valid: true,
-	}
-}
-
-// addNumeric adds two NUMERIC values without going through float64,
-// aligning them to their common (more precise) exponent first since Numeric
-// stores value as Int * 10^Exp and different rows may carry different Exp.
-func addNumeric(a, b pgtype.Numeric) pgtype.Numeric {
-	if !a.Valid || a.Int == nil {
-		a = pgtype.Numeric{Int: big.NewInt(0), Exp: b.Exp, Valid: true}
-	}
-	if !b.Valid || b.Int == nil {
-		return a
-	}
-
-	exp := a.Exp
-	if b.Exp < exp {
-		exp = b.Exp
-	}
-
-	scale := func(n *big.Int, from int32) *big.Int {
-		if from == exp {
-			return n
-		}
-		factor := new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(from-exp)), nil)
-		return new(big.Int).Mul(n, factor)
-	}
-
-	return pgtype.Numeric{
-		Int:   new(big.Int).Add(scale(a.Int, a.Exp), scale(b.Int, b.Exp)),
-		Exp:   exp,
-		Valid: true,
-	}
-}
-
-func toCartItemResponse(productID uuid.UUID, product repository.Product, quantity int32) *model.CartItemResponse {
+// IsActive is hardcoded true: both source queries already filter on is_active = true.
+func toCartItemResponse(productID uuid.UUID, name string, price pgtype.Numeric, imageURL pgtype.Text, quantity int32) *model.CartItemResponse {
 	return &model.CartItemResponse{
 		ProductID: productID,
-		Name:      product.Name,
-		Price:     NumericToString(product.Price),
-		ImageURL:  product.ImageUrl.String,
-		IsActive:  product.IsActive,
+		Name:      name,
+		Price:     NumericToString(price),
+		ImageURL:  imageURL.String,
+		IsActive:  true,
 		Quantity:  int(quantity),
-		Subtotal:  NumericToString(multiplyNumericByInt(product.Price, quantity)),
+		Subtotal:  NumericToString(multiplyNumericByInt(price, quantity)),
 	}
 }

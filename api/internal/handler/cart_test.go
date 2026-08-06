@@ -45,17 +45,31 @@ func cartUserToken(t *testing.T, userID uuid.UUID) string {
 	return token
 }
 
-func sampleCartRepoProduct(id pgtype.UUID) repository.Product {
-	return repository.Product{
-		ID:       id,
-		Name:     "Kaos Polos",
-		Price:    service.Float64ToNumeric(19.99),
-		Stock:    10,
-		Sku:      "SKU-001",
-		Category: "apparel",
-		ImageUrl: pgtype.Text{String: "https://cdn.example.com/kaos.jpg", Valid: true},
-		IsActive: true,
+func sampleAddCartItemRow(id pgtype.UUID, quantity int32, stockOK bool) repository.AddCartItemRow {
+	row := repository.AddCartItemRow{
+		ProductID: id,
+		Name:      "Kaos Polos",
+		Price:     service.Float64ToNumeric(19.99),
+		ImageUrl:  pgtype.Text{String: "https://cdn.example.com/kaos.jpg", Valid: true},
 	}
+	if stockOK {
+		row.Quantity = pgtype.Int4{Int32: quantity, Valid: true}
+	}
+	return row
+}
+
+func sampleUpdateCartItemQuantityRow(id pgtype.UUID, quantity int32, itemExists, stockOK bool) repository.UpdateCartItemQuantityRow {
+	row := repository.UpdateCartItemQuantityRow{
+		ProductID:  id,
+		Name:       "Kaos Polos",
+		Price:      service.Float64ToNumeric(19.99),
+		ImageUrl:   pgtype.Text{String: "https://cdn.example.com/kaos.jpg", Valid: true},
+		ItemExists: itemExists,
+	}
+	if itemExists && stockOK {
+		row.Quantity = pgtype.Int4{Int32: quantity, Valid: true}
+	}
+	return row
 }
 
 func TestCartHandler_GetCart(t *testing.T) {
@@ -98,9 +112,8 @@ func TestCartHandler_AddItem(t *testing.T) {
 		userID := uuid.New()
 		pgProductID := pgtype.UUID{Bytes: productID, Valid: true}
 
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(sampleCartRepoProduct(pgProductID), nil)
 		mockRepo.EXPECT().AddCartItem(gomock.Any(), gomock.Any()).
-			Return(repository.CartItem{ProductID: pgProductID, Quantity: 2}, nil)
+			Return(sampleAddCartItemRow(pgProductID, 2, true), nil)
 
 		req := newJSONRequest(t, http.MethodPost, "/cart/items/", payload)
 		req.Header.Set("Authorization", "Bearer "+cartUserToken(t, userID))
@@ -142,7 +155,7 @@ func TestCartHandler_AddItem(t *testing.T) {
 		router, mockRepo := newTestCartRouter(t)
 		userID := uuid.New()
 
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(repository.Product{}, pgx.ErrNoRows)
+		mockRepo.EXPECT().AddCartItem(gomock.Any(), gomock.Any()).Return(repository.AddCartItemRow{}, pgx.ErrNoRows)
 
 		req := newJSONRequest(t, http.MethodPost, "/cart/items/", payload)
 		req.Header.Set("Authorization", "Bearer "+cartUserToken(t, userID))
@@ -157,11 +170,8 @@ func TestCartHandler_AddItem(t *testing.T) {
 		router, mockRepo := newTestCartRouter(t)
 		userID := uuid.New()
 		pgProductID := pgtype.UUID{Bytes: productID, Valid: true}
-		lowStock := sampleCartRepoProduct(pgProductID)
-		lowStock.Stock = 1
 
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(lowStock, nil)
-		mockRepo.EXPECT().AddCartItem(gomock.Any(), gomock.Any()).Return(repository.CartItem{}, pgx.ErrNoRows)
+		mockRepo.EXPECT().AddCartItem(gomock.Any(), gomock.Any()).Return(sampleAddCartItemRow(pgProductID, 0, false), nil)
 
 		req := newJSONRequest(t, http.MethodPost, "/cart/items/", payload)
 		req.Header.Set("Authorization", "Bearer "+cartUserToken(t, userID))
@@ -182,9 +192,8 @@ func TestCartHandler_UpdateItemQuantity(t *testing.T) {
 		productID := uuid.New()
 		pgProductID := pgtype.UUID{Bytes: productID, Valid: true}
 
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(sampleCartRepoProduct(pgProductID), nil)
 		mockRepo.EXPECT().UpdateCartItemQuantity(gomock.Any(), gomock.Any()).
-			Return(repository.CartItem{ProductID: pgProductID, Quantity: 3}, nil)
+			Return(sampleUpdateCartItemQuantityRow(pgProductID, 3, true, true), nil)
 
 		req := newJSONRequest(t, http.MethodPatch, "/cart/items/"+productID.String(), payload)
 		req.Header.Set("Authorization", "Bearer "+cartUserToken(t, userID))
@@ -214,9 +223,8 @@ func TestCartHandler_UpdateItemQuantity(t *testing.T) {
 		productID := uuid.New()
 		pgProductID := pgtype.UUID{Bytes: productID, Valid: true}
 
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(sampleCartRepoProduct(pgProductID), nil)
 		mockRepo.EXPECT().UpdateCartItemQuantity(gomock.Any(), gomock.Any()).
-			Return(repository.CartItem{}, pgx.ErrNoRows)
+			Return(sampleUpdateCartItemQuantityRow(pgProductID, 0, false, false), nil)
 
 		req := newJSONRequest(t, http.MethodPatch, "/cart/items/"+productID.String(), payload)
 		req.Header.Set("Authorization", "Bearer "+cartUserToken(t, userID))
@@ -232,10 +240,9 @@ func TestCartHandler_UpdateItemQuantity(t *testing.T) {
 		userID := uuid.New()
 		productID := uuid.New()
 		pgProductID := pgtype.UUID{Bytes: productID, Valid: true}
-		lowStock := sampleCartRepoProduct(pgProductID)
-		lowStock.Stock = 1
 
-		mockRepo.EXPECT().GetProductByID(gomock.Any(), gomock.Any()).Return(lowStock, nil)
+		mockRepo.EXPECT().UpdateCartItemQuantity(gomock.Any(), gomock.Any()).
+			Return(sampleUpdateCartItemQuantityRow(pgProductID, 0, true, false), nil)
 
 		req := newJSONRequest(t, http.MethodPatch, "/cart/items/"+productID.String(), payload)
 		req.Header.Set("Authorization", "Bearer "+cartUserToken(t, userID))

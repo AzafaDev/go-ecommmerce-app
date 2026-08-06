@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"go-ecommerce-app/internal/config"
 	"go-ecommerce-app/internal/email"
 	"go-ecommerce-app/internal/handler"
+	"go-ecommerce-app/internal/payment"
 	"go-ecommerce-app/internal/repository"
 	"go-ecommerce-app/internal/service"
 	"log/slog"
@@ -64,6 +66,10 @@ func main() {
 	cartService := service.NewCartService(repo)
 	cartHandler := handler.NewCartHandler(cartService, cfg.JWTSecret)
 
+	midtransClient := payment.NewMidtransClient(cfg.MidtransServerKey, cfg.MidtransEnv)
+	orderService := service.NewOrderService(repo, dbPool, midtransClient)
+	orderHandler := handler.NewOrderHandler(orderService, cfg.JWTSecret)
+
 	r := chi.NewRouter()
 
 	r.Use(middleware.RequestID)
@@ -82,6 +88,7 @@ func main() {
 		userHandler.UserRoutes(r)
 		productHandler.ProductRoutes(r)
 		cartHandler.CartRoutes(r)
+		orderHandler.OrderRoutes(r)
 	})
 
 	srv := http.Server{
@@ -91,11 +98,13 @@ func main() {
 
 	fmt.Println("server is running at port:", cfg.Port)
 	go func() {
-		if err := srv.ListenAndServe(); err != nil {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			slog.Error("server", "error", err)
 			os.Exit(1)
 		}
 	}()
+
+	go runOrderSweeper(ctx, orderService, cfg.OrderSweepInterval, cfg.OrderSweepThreshold)
 
 	<-ctx.Done()
 
@@ -112,4 +121,26 @@ func main() {
 	}
 
 	slog.Info("server is already stopped")
+}
+
+// runOrderSweeper stops on ctx cancellation, same signal as the HTTP server.
+func runOrderSweeper(ctx context.Context, orderService *service.OrderService, interval, threshold time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			swept, err := orderService.SweepExpiredOrders(ctx, threshold)
+			if err != nil {
+				slog.Error("order sweep", "error", err, "swept", swept)
+				continue
+			}
+			if swept > 0 {
+				slog.Info("order sweep", "swept", swept)
+			}
+		}
+	}
 }

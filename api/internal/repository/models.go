@@ -26,6 +26,29 @@ type EmailVerificationToken struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type Order struct {
+	ID              pgtype.UUID
+	UserID          pgtype.UUID
+	Status          string
+	TotalAmount     pgtype.Numeric
+	MidtransOrderID pgtype.Text
+	SnapToken       pgtype.Text
+	CreatedAt       pgtype.Timestamptz
+	UpdatedAt       pgtype.Timestamptz
+	PaidAt          pgtype.Timestamptz
+}
+
+type OrderItem struct {
+	ID          pgtype.UUID
+	OrderID     pgtype.UUID
+	ProductID   pgtype.UUID
+	ProductName string
+	Price       pgtype.Numeric
+	Quantity    int32
+	Subtotal    pgtype.Numeric
+	CreatedAt   pgtype.Timestamptz
+}
+
 type PasswordResetToken struct {
 	ID        pgtype.UUID
 	UserID    pgtype.UUID

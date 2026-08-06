@@ -29,6 +29,7 @@ type AdminCountProductsParams struct {
 	Category pgtype.Text
 }
 
+// Fallback for AdminListProducts; see CountProducts.
 func (q *Queries) AdminCountProducts(ctx context.Context, arg AdminCountProductsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, adminCountProducts, arg.Search, arg.Category)
 	var count int64
@@ -113,7 +114,7 @@ func (q *Queries) AdminGetProductBySKU(ctx context.Context, sku string) (Product
 }
 
 const adminListProducts = `-- name: AdminListProducts :many
-SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url, COUNT(*) OVER() AS total_count
 FROM products
 WHERE (
         $3::text IS NULL
@@ -134,7 +135,22 @@ type AdminListProductsParams struct {
 	Category pgtype.Text
 }
 
-func (q *Queries) AdminListProducts(ctx context.Context, arg AdminListProductsParams) ([]Product, error) {
+type AdminListProductsRow struct {
+	ID          pgtype.UUID
+	Name        string
+	Description pgtype.Text
+	Price       pgtype.Numeric
+	Stock       int32
+	Sku         string
+	Category    string
+	IsActive    bool
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	ImageUrl    pgtype.Text
+	TotalCount  int64
+}
+
+func (q *Queries) AdminListProducts(ctx context.Context, arg AdminListProductsParams) ([]AdminListProductsRow, error) {
 	rows, err := q.db.Query(ctx, adminListProducts,
 		arg.Limit,
 		arg.Offset,
@@ -145,9 +161,9 @@ func (q *Queries) AdminListProducts(ctx context.Context, arg AdminListProductsPa
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Product
+	var items []AdminListProductsRow
 	for rows.Next() {
-		var i Product
+		var i AdminListProductsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -160,6 +176,7 @@ func (q *Queries) AdminListProducts(ctx context.Context, arg AdminListProductsPa
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ImageUrl,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}
@@ -190,6 +207,9 @@ type CountProductsParams struct {
 	Category pgtype.Text
 }
 
+// Fallback for ListProducts when the page/offset lands past the end of the
+// result set: zero rows come back, so COUNT(*) OVER() has nothing to ride
+// on. Only called in that case, not on every listing.
 func (q *Queries) CountProducts(ctx context.Context, arg CountProductsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countProducts, arg.Search, arg.Category)
 	var count int64
@@ -231,6 +251,39 @@ func (q *Queries) CreateProduct(ctx context.Context, arg CreateProductParams) (P
 		arg.Category,
 		arg.ImageUrl,
 	)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Description,
+		&i.Price,
+		&i.Stock,
+		&i.Sku,
+		&i.Category,
+		&i.IsActive,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ImageUrl,
+	)
+	return i, err
+}
+
+const decrementProductStock = `-- name: DecrementProductStock :one
+UPDATE products
+SET stock = stock - $1,
+    updated_at = now()
+WHERE id = $2
+    AND stock >= $1
+RETURNING id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
+`
+
+type DecrementProductStockParams struct {
+	Stock int32
+	ID    pgtype.UUID
+}
+
+func (q *Queries) DecrementProductStock(ctx context.Context, arg DecrementProductStockParams) (Product, error) {
+	row := q.db.QueryRow(ctx, decrementProductStock, arg.Stock, arg.ID)
 	var i Product
 	err := row.Scan(
 		&i.ID,
@@ -301,8 +354,25 @@ func (q *Queries) GetProductByID(ctx context.Context, id pgtype.UUID) (Product, 
 	return i, err
 }
 
+const incrementProductStock = `-- name: IncrementProductStock :exec
+UPDATE products
+SET stock = stock + $1,
+    updated_at = now()
+WHERE id = $2
+`
+
+type IncrementProductStockParams struct {
+	Stock int32
+	ID    pgtype.UUID
+}
+
+func (q *Queries) IncrementProductStock(ctx context.Context, arg IncrementProductStockParams) error {
+	_, err := q.db.Exec(ctx, incrementProductStock, arg.Stock, arg.ID)
+	return err
+}
+
 const listProducts = `-- name: ListProducts :many
-SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url
+SELECT id, name, description, price, stock, sku, category, is_active, created_at, updated_at, image_url, COUNT(*) OVER() AS total_count
 FROM products
 WHERE is_active = true
     AND (
@@ -324,7 +394,24 @@ type ListProductsParams struct {
 	Category pgtype.Text
 }
 
-func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]Product, error) {
+type ListProductsRow struct {
+	ID          pgtype.UUID
+	Name        string
+	Description pgtype.Text
+	Price       pgtype.Numeric
+	Stock       int32
+	Sku         string
+	Category    string
+	IsActive    bool
+	CreatedAt   pgtype.Timestamptz
+	UpdatedAt   pgtype.Timestamptz
+	ImageUrl    pgtype.Text
+	TotalCount  int64
+}
+
+// total_count carries the full matching row count on every row via a window
+// function, so the caller gets pagination totals without a second query.
+func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]ListProductsRow, error) {
 	rows, err := q.db.Query(ctx, listProducts,
 		arg.Limit,
 		arg.Offset,
@@ -335,9 +422,9 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Product
+	var items []ListProductsRow
 	for rows.Next() {
-		var i Product
+		var i ListProductsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
@@ -350,6 +437,7 @@ func (q *Queries) ListProducts(ctx context.Context, arg ListProductsParams) ([]P
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ImageUrl,
+			&i.TotalCount,
 		); err != nil {
 			return nil, err
 		}
