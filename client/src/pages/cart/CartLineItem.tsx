@@ -42,42 +42,44 @@ export function CartLineItem({ item }: { item: CartItem }) {
   }
 
   return (
-    <div className="flex items-center gap-4 border-b-2 border-line py-4 last:border-b-0">
-      <ProductImage
-        src={item.image_url}
-        alt={item.name}
-        className="h-20 w-20 shrink-0 border-2 border-ink"
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2">
-          <Link
-            to={`/products/${item.product_id}`}
-            className="truncate text-[14.5px] font-extrabold text-ink hover:text-brand-700"
-          >
-            {item.name}
-          </Link>
-          {!item.is_active && <Badge variant="danger">No longer available</Badge>}
-        </div>
-        <p className="mt-0.5 text-[12.5px] text-ink-muted">{formatIDR(item.price)} / item</p>
-        <div className="mt-3">
-          <QuantityStepper
-            value={item.quantity}
-            onChange={handleQuantityChange}
-            disabled={busy || !item.is_active}
-          />
+    <div className="flex flex-col gap-3 border-b-2 border-line py-4 last:border-b-0 sm:flex-row sm:items-center sm:gap-4">
+      <div className="flex min-w-0 items-center gap-4 sm:flex-1">
+        <ProductImage
+          src={item.image_url}
+          alt={item.name}
+          className="h-20 w-20 shrink-0 border-2 border-ink"
+        />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Link
+              to={`/products/${item.product_id}`}
+              className="truncate text-[14.5px] font-extrabold text-ink hover:text-brand-700"
+            >
+              {item.name}
+            </Link>
+            {!item.is_active && <Badge variant="danger">No longer available</Badge>}
+          </div>
+          <p className="mt-0.5 text-[12.5px] text-ink-muted">{formatIDR(item.price)} / item</p>
         </div>
       </div>
-      <div className="flex shrink-0 flex-col items-end gap-3">
-        <p className="text-[15px] font-extrabold text-ink">{formatIDR(item.subtotal)}</p>
-        <button
-          type="button"
-          aria-label="Remove item"
-          onClick={handleRemove}
-          disabled={busy}
-          className="text-ink-muted transition-colors hover:text-danger-600 disabled:opacity-40"
-        >
-          <Trash2 size={16} />
-        </button>
+      <div className="flex items-center justify-between gap-4 sm:shrink-0 sm:justify-end sm:gap-6">
+        <QuantityStepper
+          value={item.quantity}
+          onChange={handleQuantityChange}
+          disabled={busy || !item.is_active}
+        />
+        <div className="flex shrink-0 items-center gap-3">
+          <p className="text-[15px] font-extrabold text-ink">{formatIDR(item.subtotal)}</p>
+          <button
+            type="button"
+            aria-label="Remove item"
+            onClick={handleRemove}
+            disabled={busy}
+            className="text-ink-muted transition-colors hover:text-danger-600 disabled:opacity-40"
+          >
+            <Trash2 size={16} />
+          </button>
+        </div>
       </div>
     </div>
   )

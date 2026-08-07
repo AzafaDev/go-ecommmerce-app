@@ -65,14 +65,14 @@ export function AdminProductListPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-[26px] font-extrabold text-ink">Manage products</h1>
           <p className="text-[14px] text-ink-muted">Create, edit, and remove catalog products.</p>
         </div>
         <Link
           to="/admin/products/new"
-          className="inline-flex items-center gap-1.5 rounded-full border-2 border-ink bg-brand-600 px-5 py-2.5 text-[14px] font-bold text-white shadow-hard-sm transition-all hover:-translate-y-0.5 hover:bg-brand-700"
+          className="inline-flex items-center justify-center gap-1.5 self-start rounded-full border-2 border-ink bg-brand-600 px-5 py-2.5 text-[14px] font-bold text-white shadow-hard-sm transition-all hover:-translate-y-0.5 hover:bg-brand-700"
         >
           <Plus size={15} />
           New product
