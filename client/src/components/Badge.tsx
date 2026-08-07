@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 
 type BadgeProps = {
-  variant?: 'neutral' | 'success' | 'danger'
+  variant?: 'neutral' | 'success' | 'danger' | 'warning'
   children: ReactNode
 }
 
@@ -10,6 +10,7 @@ export function Badge({ variant = 'neutral', children }: BadgeProps) {
     neutral: 'bg-paper text-ink',
     success: 'bg-brand-50 text-brand-700',
     danger: 'bg-danger-50 text-danger-700',
+    warning: 'bg-warning-50 text-warning-700',
   }[variant]
 
   return (

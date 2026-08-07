@@ -174,6 +174,116 @@ func TestOrderService_HandleWebhook(t *testing.T) {
 	})
 }
 
+func sampleOrder(id, userID uuid.UUID, status string) repository.Order {
+	return repository.Order{
+		ID:          pgtype.UUID{Bytes: id, Valid: true},
+		UserID:      pgtype.UUID{Bytes: userID, Valid: true},
+		Status:      status,
+		TotalAmount: service.Float64ToNumeric(19.99),
+		CreatedAt:   pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+}
+
+func sampleOrderItemRow(orderID, productID uuid.UUID) repository.OrderItem {
+	return repository.OrderItem{
+		ID:          pgtype.UUID{Bytes: uuid.New(), Valid: true},
+		OrderID:     pgtype.UUID{Bytes: orderID, Valid: true},
+		ProductID:   pgtype.UUID{Bytes: productID, Valid: true},
+		ProductName: "Kaos Polos",
+		Price:       service.Float64ToNumeric(19.99),
+		Quantity:    1,
+		Subtotal:    service.Float64ToNumeric(19.99),
+	}
+}
+
+func TestOrderService_ListOrders(t *testing.T) {
+	userID := uuid.New()
+
+	t.Run("no orders returns an empty slice, not nil", func(t *testing.T) {
+		svc, mockRepo := newTestOrderService(t)
+		mockRepo.EXPECT().ListOrdersByUser(gomock.Any(), gomock.Any()).Return(nil, nil)
+
+		orders, err := svc.ListOrders(context.Background(), userID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, []model.OrderResponse{}, orders)
+	})
+
+	t.Run("fetches items per order and maps them into the response", func(t *testing.T) {
+		svc, mockRepo := newTestOrderService(t)
+		orderA := sampleOrder(uuid.New(), userID, service.OrderStatusPaid)
+		orderB := sampleOrder(uuid.New(), userID, service.OrderStatusPendingPayment)
+		productID := uuid.New()
+
+		mockRepo.EXPECT().ListOrdersByUser(gomock.Any(), gomock.Any()).
+			Return([]repository.Order{orderA, orderB}, nil)
+		mockRepo.EXPECT().ListOrderItemsByOrder(gomock.Any(), orderA.ID).
+			Return([]repository.OrderItem{sampleOrderItemRow(uuid.UUID(orderA.ID.Bytes), productID)}, nil)
+		mockRepo.EXPECT().ListOrderItemsByOrder(gomock.Any(), orderB.ID).
+			Return([]repository.OrderItem{sampleOrderItemRow(uuid.UUID(orderB.ID.Bytes), productID)}, nil)
+
+		orders, err := svc.ListOrders(context.Background(), userID)
+
+		assert.NoError(t, err)
+		assert.Len(t, orders, 2)
+		assert.Len(t, orders[0].Items, 1)
+		assert.Len(t, orders[1].Items, 1)
+	})
+
+	t.Run("list orders error is propagated", func(t *testing.T) {
+		svc, mockRepo := newTestOrderService(t)
+		mockRepo.EXPECT().ListOrdersByUser(gomock.Any(), gomock.Any()).Return(nil, errors.New("connection reset"))
+
+		orders, err := svc.ListOrders(context.Background(), userID)
+
+		assert.Error(t, err)
+		assert.Nil(t, orders)
+	})
+}
+
+func TestOrderService_GetOrder(t *testing.T) {
+	userID := uuid.New()
+	orderID := uuid.New()
+
+	t.Run("success returns the order with its items", func(t *testing.T) {
+		svc, mockRepo := newTestOrderService(t)
+		order := sampleOrder(orderID, userID, service.OrderStatusPaid)
+		productID := uuid.New()
+
+		mockRepo.EXPECT().GetOrderByID(gomock.Any(), gomock.Any()).Return(order, nil)
+		mockRepo.EXPECT().ListOrderItemsByOrder(gomock.Any(), order.ID).
+			Return([]repository.OrderItem{sampleOrderItemRow(orderID, productID)}, nil)
+
+		got, err := svc.GetOrder(context.Background(), userID, orderID)
+
+		assert.NoError(t, err)
+		assert.Equal(t, orderID, got.ID)
+		assert.Len(t, got.Items, 1)
+	})
+
+	t.Run("unknown order id returns ErrOrderNotFound", func(t *testing.T) {
+		svc, mockRepo := newTestOrderService(t)
+		mockRepo.EXPECT().GetOrderByID(gomock.Any(), gomock.Any()).Return(repository.Order{}, pgx.ErrNoRows)
+
+		got, err := svc.GetOrder(context.Background(), userID, orderID)
+
+		assert.ErrorIs(t, err, service.ErrOrderNotFound)
+		assert.Nil(t, got)
+	})
+
+	t.Run("order belonging to another user returns ErrOrderNotFound", func(t *testing.T) {
+		svc, mockRepo := newTestOrderService(t)
+		order := sampleOrder(orderID, uuid.New(), service.OrderStatusPaid)
+		mockRepo.EXPECT().GetOrderByID(gomock.Any(), gomock.Any()).Return(order, nil)
+		// ListOrderItemsByOrder deliberately NOT EXPECT()'d: ownership check must short-circuit first.
+
+		got, err := svc.GetOrder(context.Background(), userID, orderID)
+
+		assert.ErrorIs(t, err, service.ErrOrderNotFound)
+		assert.Nil(t, got)
+	})
+}
+
 func TestOrderService_SweepExpiredOrders(t *testing.T) {
 	t.Run("nothing past the threshold sweeps zero without opening a transaction", func(t *testing.T) {
 		svc, mockRepo := newTestOrderService(t)

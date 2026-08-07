@@ -7,6 +7,9 @@ import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { ProfilePage } from './pages/ProfilePage'
 import { ProductListPage } from './pages/products/ProductListPage'
 import { ProductDetailPage } from './pages/products/ProductDetailPage'
+import { CartPage } from './pages/cart/CartPage'
+import { OrderListPage } from './pages/orders/OrderListPage'
+import { OrderDetailPage } from './pages/orders/OrderDetailPage'
 import { AdminProductListPage } from './pages/admin/AdminProductListPage'
 import { AdminProductFormPage } from './pages/admin/AdminProductFormPage'
 import { AppShell } from './components/AppShell'
@@ -34,6 +37,9 @@ function App() {
 
         <Route element={<ProtectedRoute />}>
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/cart" element={<CartPage />} />
+          <Route path="/orders" element={<OrderListPage />} />
+          <Route path="/orders/:id" element={<OrderDetailPage />} />
         </Route>
 
         <Route element={<AdminRoute />}>

@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi"
+	"github.com/google/uuid"
 )
 
 type OrderHandler struct {
@@ -32,6 +33,8 @@ func (h *OrderHandler) OrderRoutes(r chi.Router) {
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthMiddleware(h.secretKey))
 			r.Post("/checkout", h.Checkout)
+			r.Get("/", h.ListOrders)
+			r.Get("/{id}", h.GetOrder)
 		})
 	})
 }
@@ -72,6 +75,58 @@ func (h *OrderHandler) Webhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.WriteJSON(response.JSONResponse{Success: true}, http.StatusOK, w)
+}
+
+func (h *OrderHandler) ListOrders(w http.ResponseWriter, r *http.Request) {
+	claims, err := middleware.GetClaims(r.Context())
+	if err != nil {
+		slog.Error("list orders", "error", err)
+		response.WriteErrorJSON("unauthorized", http.StatusUnauthorized, w)
+		return
+	}
+
+	orders, err := h.srv.ListOrders(r.Context(), claims.ID)
+	if err != nil {
+		h.handleOrderError(w, "list order", err)
+		return
+	}
+
+	response.WriteJSON(response.JSONResponse{
+		Success: true,
+		Data: map[string]any{
+			"orders": orders,
+		},
+	}, http.StatusOK, w)
+}
+
+func (h *OrderHandler) GetOrder(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		slog.Error("get order", "error", err)
+		response.WriteErrorJSON("order id is invalid", http.StatusBadRequest, w)
+		return
+	}
+
+	claims, err := middleware.GetClaims(r.Context())
+	if err != nil {
+		slog.Error("get order", "error", err)
+		response.WriteErrorJSON("unauthorized", http.StatusUnauthorized, w)
+		return
+	}
+
+	order, err := h.srv.GetOrder(r.Context(), claims.ID, id)
+	if err != nil {
+		h.handleOrderError(w, "get order", err)
+		return
+	}
+
+	response.WriteJSON(response.JSONResponse{
+		Success: true,
+		Data: map[string]any{
+			"order": order,
+		},
+	}, http.StatusOK, w)
 }
 
 func (h *OrderHandler) handleOrderError(w http.ResponseWriter, logCtx string, err error) {
