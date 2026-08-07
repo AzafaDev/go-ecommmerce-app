@@ -40,6 +40,16 @@ func NewUserHandler(srv *service.UserService, secret string, refreshTokenExpiry 
 	}
 }
 
+// Production serves the frontend and API from different domains (e.g.
+// Vercel + a VPS subdomain), so the cookie must be sendable cross-site —
+// SameSite=None requires Secure, which is only valid over HTTPS.
+func (u *UserHandler) refreshCookieSameSite() http.SameSite {
+	if u.env == "production" {
+		return http.SameSiteNoneMode
+	}
+	return http.SameSiteLaxMode
+}
+
 func (u *UserHandler) refreshTokenCookie(value string) http.Cookie {
 	return http.Cookie{
 		Name:     "refresh_token",
@@ -49,7 +59,7 @@ func (u *UserHandler) refreshTokenCookie(value string) http.Cookie {
 		MaxAge:   int(u.refreshTokenExpiry.Seconds()),
 		HttpOnly: true,
 		Secure:   u.env == "production",
-		SameSite: http.SameSiteLaxMode,
+		SameSite: u.refreshCookieSameSite(),
 	}
 }
 
@@ -62,7 +72,7 @@ func (u *UserHandler) clearRefreshTokenCookie() http.Cookie {
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   u.env == "production",
-		SameSite: http.SameSiteLaxMode,
+		SameSite: u.refreshCookieSameSite(),
 	}
 }
 
