@@ -45,24 +45,29 @@ func newTestService(t *testing.T) (*service.UserService, *repomocks.MockQuerier,
 
 func TestUserService_Register(t *testing.T) {
 	tests := []struct {
-		name      string
-		setup     func(repo *repomocks.MockQuerier, email *emailmocks.MockEmailSender)
+		name string
+		// emailSent is closed from inside the mock's Do() callback, letting the
+		// test wait for Register's background goroutine instead of racing it.
+		setup     func(repo *repomocks.MockQuerier, email *emailmocks.MockEmailSender, emailSent chan struct{})
 		assertErr func(t *testing.T, err error)
+		waitEmail bool
 	}{
 		{
 			name: "success",
-			setup: func(repo *repomocks.MockQuerier, email *emailmocks.MockEmailSender) {
+			setup: func(repo *repomocks.MockQuerier, email *emailmocks.MockEmailSender, emailSent chan struct{}) {
 				repo.EXPECT().CreateUser(gomock.Any(), gomock.Any()).
 					Return(repository.User{ID: randomUUID(), Email: "jane@example.com", FullName: "Jane Doe"}, nil)
 				repo.EXPECT().CreateVericationEmail(gomock.Any(), gomock.Any()).
 					Return(repository.EmailVerificationToken{}, nil)
 				email.EXPECT().SendVerificationEmail(gomock.Any(), "jane@example.com", gomock.Any()).
+					Do(func(context.Context, string, string) { close(emailSent) }).
 					Return(nil)
 			},
+			waitEmail: true,
 		},
 		{
 			name: "email already taken",
-			setup: func(repo *repomocks.MockQuerier, email *emailmocks.MockEmailSender) {
+			setup: func(repo *repomocks.MockQuerier, email *emailmocks.MockEmailSender, emailSent chan struct{}) {
 				repo.EXPECT().CreateUser(gomock.Any(), gomock.Any()).
 					Return(repository.User{}, &pgconn.PgError{Code: "23505"})
 				// CreateVericationEmail and SendVerificationEmail deliberately NOT EXPECT()'d.
@@ -72,25 +77,25 @@ func TestUserService_Register(t *testing.T) {
 			},
 		},
 		{
-			name: "email sending fails",
-			setup: func(repo *repomocks.MockQuerier, email *emailmocks.MockEmailSender) {
+			name: "email sending fails but registration still succeeds",
+			setup: func(repo *repomocks.MockQuerier, email *emailmocks.MockEmailSender, emailSent chan struct{}) {
 				repo.EXPECT().CreateUser(gomock.Any(), gomock.Any()).
 					Return(repository.User{ID: randomUUID(), Email: "jane@example.com"}, nil)
 				repo.EXPECT().CreateVericationEmail(gomock.Any(), gomock.Any()).
 					Return(repository.EmailVerificationToken{}, nil)
 				email.EXPECT().SendVerificationEmail(gomock.Any(), gomock.Any(), gomock.Any()).
+					Do(func(context.Context, string, string) { close(emailSent) }).
 					Return(errors.New("smtp down"))
 			},
-			assertErr: func(t *testing.T, err error) {
-				assert.Error(t, err)
-			},
+			waitEmail: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			svc, mockRepo, mockEmail := newTestService(t)
-			tt.setup(mockRepo, mockEmail)
+			emailSent := make(chan struct{})
+			tt.setup(mockRepo, mockEmail, emailSent)
 
 			req := model.RegisterUserRequest{
 				FullName: "Jane Doe",
@@ -107,6 +112,14 @@ func TestUserService_Register(t *testing.T) {
 			}
 			require.NoError(t, err)
 			require.NotNil(t, user)
+
+			if tt.waitEmail {
+				select {
+				case <-emailSent:
+				case <-time.After(time.Second):
+					t.Fatal("timed out waiting for background SendVerificationEmail call")
+				}
+			}
 		})
 	}
 }
@@ -304,13 +317,24 @@ func TestUserService_ResendVerification(t *testing.T) {
 			ID:    randomUUID(),
 			Email: "jane@example.com",
 		}
+		emailSent := make(chan struct{})
 		mockRepo.EXPECT().GetUserByEmail(gomock.Any(), "jane@example.com").Return(unverifiedUser, nil)
 		mockRepo.EXPECT().CreateVericationEmail(gomock.Any(), gomock.Any()).Return(repository.EmailVerificationToken{}, nil)
-		mockEmail.EXPECT().SendVerificationEmail(gomock.Any(), "jane@example.com", gomock.Any()).Return(nil)
+		mockEmail.EXPECT().SendVerificationEmail(gomock.Any(), "jane@example.com", gomock.Any()).
+			Do(func(context.Context, string, string) { close(emailSent) }).
+			Return(nil)
 
 		err := svc.ResendVerification(context.Background(), "jane@example.com")
 
 		require.NoError(t, err)
+
+		// SendVerificationEmail now runs in a background goroutine, so wait for
+		// it instead of letting the test finish and racing gomock's Finish check.
+		select {
+		case <-emailSent:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for background SendVerificationEmail call")
+		}
 	})
 }
 
@@ -319,13 +343,22 @@ func TestUserService_ForgotPassword(t *testing.T) {
 		svc, mockRepo, mockEmail := newTestService(t)
 
 		user := repository.User{ID: randomUUID(), Email: "jane@example.com"}
+		emailSent := make(chan struct{})
 		mockRepo.EXPECT().GetUserByEmail(gomock.Any(), "jane@example.com").Return(user, nil)
 		mockRepo.EXPECT().CreateResetPasswordToken(gomock.Any(), gomock.Any()).Return(repository.PasswordResetToken{}, nil)
-		mockEmail.EXPECT().SendPasswordResetEmail(gomock.Any(), "jane@example.com", gomock.Any()).Return(nil)
+		mockEmail.EXPECT().SendPasswordResetEmail(gomock.Any(), "jane@example.com", gomock.Any()).
+			Do(func(context.Context, string, string) { close(emailSent) }).
+			Return(nil)
 
 		err := svc.ForgotPassword(context.Background(), "jane@example.com")
 
 		require.NoError(t, err)
+
+		select {
+		case <-emailSent:
+		case <-time.After(time.Second):
+			t.Fatal("timed out waiting for background SendPasswordResetEmail call")
+		}
 	})
 }
 

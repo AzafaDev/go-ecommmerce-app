@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -24,6 +25,7 @@ import (
 )
 
 func main() {
+	var wg sync.WaitGroup
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -104,7 +106,8 @@ func main() {
 		}
 	}()
 
-	go runOrderSweeper(ctx, orderService, cfg.OrderSweepInterval, cfg.OrderSweepThreshold)
+	wg.Add(1)
+	go runOrderSweeper(ctx, &wg, orderService, cfg.OrderSweepInterval, cfg.OrderSweepThreshold)
 
 	<-ctx.Done()
 
@@ -120,11 +123,26 @@ func main() {
 		slog.Info("server stopeed successfully")
 	}
 
+	sweeperDone := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(sweeperDone)
+	}()
+
+	select {
+	case <-sweeperDone:
+		slog.Info("sweeper stopped cleanly")
+	case <-time.After(5 * time.Second):
+		slog.Warn("sweeper did not stop before timeout, exiting anyway")
+	}
+
 	slog.Info("server is already stopped")
 }
 
 // runOrderSweeper stops on ctx cancellation, same signal as the HTTP server.
-func runOrderSweeper(ctx context.Context, orderService *service.OrderService, interval, threshold time.Duration) {
+func runOrderSweeper(ctx context.Context, wg *sync.WaitGroup, orderService *service.OrderService, interval, threshold time.Duration) {
+	defer wg.Done()
+
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 

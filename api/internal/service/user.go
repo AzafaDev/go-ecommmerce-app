@@ -17,7 +17,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-
 type UserService struct {
 	repo  repository.Querier
 	cfg   *config.Config
@@ -91,9 +90,14 @@ func (u *UserService) Register(ctx context.Context, req model.RegisterUserReques
 		return nil, fmt.Errorf("error in creating verification email token: %w", err)
 	}
 
-	if err := u.email.SendVerificationEmail(ctx, createdUser.Email, randomString); err != nil {
-		return nil, fmt.Errorf("error in sending verification email: %w", err)
-	}
+	go func() {
+		emailCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := u.email.SendVerificationEmail(emailCtx, createdUser.Email, randomString); err != nil {
+			slog.Error("failed to send verification email", "error", err, "user_id", createdUser.ID)
+		}
+	}()
 
 	return toUserResponse(createdUser), nil
 }
@@ -283,9 +287,13 @@ func (u *UserService) ResendVerification(ctx context.Context, email string) erro
 		return fmt.Errorf("error in creating verification email token: %w", err)
 	}
 
-	if err := u.email.SendVerificationEmail(ctx, existingUser.Email, randomString); err != nil {
-		return fmt.Errorf("error in sending verification email: %w", err)
-	}
+	go func() {
+		emailCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := u.email.SendVerificationEmail(emailCtx, existingUser.Email, randomString); err != nil {
+			slog.Error("failed to resend verification email", "error", err, "user_id", existingUser.ID)
+		}
+	}()
 	return nil
 }
 
@@ -316,9 +324,13 @@ func (u *UserService) ForgotPassword(ctx context.Context, email string) error {
 		return fmt.Errorf("error in creating verification email token: %w", err)
 	}
 
-	if err := u.email.SendPasswordResetEmail(ctx, existingUser.Email, randomString); err != nil {
-		return fmt.Errorf("error in sending verification email: %w", err)
-	}
+	go func() {
+		emailCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := u.email.SendPasswordResetEmail(emailCtx, existingUser.Email, randomString); err != nil {
+			slog.Error("failed to send password reset email", "error", err, "user_id", existingUser.ID)
+		}
+	}()
 
 	slog.Info("security_event", "event", "password_reset_requested", "user_id", existingUser.ID)
 
