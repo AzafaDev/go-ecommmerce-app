@@ -10,6 +10,7 @@ import (
 	"go-ecommerce-app/pkg/security"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,9 +19,10 @@ import (
 )
 
 type UserService struct {
-	repo  repository.Querier
-	cfg   *config.Config
-	email EmailSender
+	repo    repository.Querier
+	cfg     *config.Config
+	email   EmailSender
+	emailWG sync.WaitGroup
 }
 
 func NewUserService(repo repository.Querier, cfg *config.Config, email EmailSender) *UserService {
@@ -28,6 +30,40 @@ func NewUserService(repo repository.Querier, cfg *config.Config, email EmailSend
 		repo:  repo,
 		cfg:   cfg,
 		email: email,
+	}
+}
+
+// sendEmailAsync dispatches an email send off the request path so callers
+// don't wait on a third-party API. It's tracked on emailWG so callers can
+// deterministically drain in-flight sends via WaitPendingEmails - both on
+// graceful shutdown (so we don't drop mail mid-flight) and in tests
+// (so assertions don't race the goroutine).
+func (u *UserService) sendEmailAsync(work func(ctx context.Context) error, logMsg string, fields ...any) {
+	u.emailWG.Add(1)
+	go func() {
+		defer u.emailWG.Done()
+
+		emailCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if err := work(emailCtx); err != nil {
+			slog.Error(logMsg, append([]any{"error", err}, fields...)...)
+		}
+	}()
+}
+
+// WaitPendingEmails blocks until all in-flight async email sends finish or
+// ctx is done, whichever comes first.
+func (u *UserService) WaitPendingEmails(ctx context.Context) {
+	done := make(chan struct{})
+	go func() {
+		u.emailWG.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-ctx.Done():
 	}
 }
 
@@ -90,14 +126,9 @@ func (u *UserService) Register(ctx context.Context, req model.RegisterUserReques
 		return nil, fmt.Errorf("error in creating verification email token: %w", err)
 	}
 
-	go func() {
-		emailCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if err := u.email.SendVerificationEmail(emailCtx, createdUser.Email, randomString); err != nil {
-			slog.Error("failed to send verification email", "error", err, "user_id", createdUser.ID)
-		}
-	}()
+	u.sendEmailAsync(func(ctx context.Context) error {
+		return u.email.SendVerificationEmail(ctx, createdUser.Email, randomString)
+	}, "failed to send verification email", "user_id", createdUser.ID)
 
 	return toUserResponse(createdUser), nil
 }
@@ -287,13 +318,10 @@ func (u *UserService) ResendVerification(ctx context.Context, email string) erro
 		return fmt.Errorf("error in creating verification email token: %w", err)
 	}
 
-	go func() {
-		emailCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := u.email.SendVerificationEmail(emailCtx, existingUser.Email, randomString); err != nil {
-			slog.Error("failed to resend verification email", "error", err, "user_id", existingUser.ID)
-		}
-	}()
+	u.sendEmailAsync(func(ctx context.Context) error {
+		return u.email.SendVerificationEmail(ctx, existingUser.Email, randomString)
+	}, "failed to resend verification email", "user_id", existingUser.ID)
+
 	return nil
 }
 
@@ -324,13 +352,9 @@ func (u *UserService) ForgotPassword(ctx context.Context, email string) error {
 		return fmt.Errorf("error in creating verification email token: %w", err)
 	}
 
-	go func() {
-		emailCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if err := u.email.SendPasswordResetEmail(emailCtx, existingUser.Email, randomString); err != nil {
-			slog.Error("failed to send password reset email", "error", err, "user_id", existingUser.ID)
-		}
-	}()
+	u.sendEmailAsync(func(ctx context.Context) error {
+		return u.email.SendPasswordResetEmail(ctx, existingUser.Email, randomString)
+	}, "failed to send password reset email", "user_id", existingUser.ID)
 
 	slog.Info("security_event", "event", "password_reset_requested", "user_id", existingUser.ID)
 

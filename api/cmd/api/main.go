@@ -123,6 +123,8 @@ func main() {
 		slog.Info("server stopeed successfully")
 	}
 
+	userService.WaitPendingEmails(shutdownCtx)
+
 	sweeperDone := make(chan struct{})
 	go func() {
 		wg.Wait()

@@ -38,4 +38,3 @@ func HashRefreshToken(token string) string {
 	hashedToken := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(hashedToken[:])
 }
-

@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -33,7 +34,7 @@ type jsonResponse struct {
 	Data    map[string]any `json:"data"`
 }
 
-func newTestHandler(t *testing.T) (*handler.UserHandler, *repomocks.MockQuerier, *emailmocks.MockEmailSender) {
+func newTestHandler(t *testing.T) (*handler.UserHandler, *service.UserService, *repomocks.MockQuerier, *emailmocks.MockEmailSender) {
 	t.Helper()
 	ctrl := gomock.NewController(t)
 	mockRepo := repomocks.NewMockQuerier(ctrl)
@@ -50,7 +51,7 @@ func newTestHandler(t *testing.T) (*handler.UserHandler, *repomocks.MockQuerier,
 	// separate middleware around the route, not inside the handler method -
 	// so a nil *redis.Client is safe here.
 	h := handler.NewUserHandler(svc, cfg.JWTSecret, cfg.RefreshTokenExpiry, nil, "test")
-	return h, mockRepo, mockEmail
+	return h, svc, mockRepo, mockEmail
 }
 
 func newJSONRequest(t *testing.T, method, path string, body any) *http.Request {
@@ -71,7 +72,7 @@ func decodeResponse(t *testing.T, rec *httptest.ResponseRecorder) jsonResponse {
 
 func TestUserHandler_Login(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		h, mockRepo, _ := newTestHandler(t)
+		h, _, mockRepo, _ := newTestHandler(t)
 
 		const rawPassword = "correct-horse-battery-staple"
 		hashed, err := security.HashPassword(rawPassword)
@@ -107,7 +108,7 @@ func TestUserHandler_Login(t *testing.T) {
 	})
 
 	t.Run("bad credentials return 400", func(t *testing.T) {
-		h, mockRepo, _ := newTestHandler(t)
+		h, _, mockRepo, _ := newTestHandler(t)
 
 		hashed, err := security.HashPassword("the-real-password")
 		require.NoError(t, err)
@@ -134,7 +135,7 @@ func TestUserHandler_Login(t *testing.T) {
 
 func TestUserHandler_Register(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
-		h, mockRepo, mockEmail := newTestHandler(t)
+		h, svc, mockRepo, mockEmail := newTestHandler(t)
 
 		mockRepo.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(repository.User{
 			ID:       pgtype.UUID{Bytes: [16]byte{1}, Valid: true},
@@ -153,6 +154,10 @@ func TestUserHandler_Register(t *testing.T) {
 
 		h.Register(rec, req)
 
+		waitCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		svc.WaitPendingEmails(waitCtx)
+
 		require.Equal(t, http.StatusCreated, rec.Code)
 		got := decodeResponse(t, rec)
 		assert.True(t, got.Success)
@@ -160,7 +165,7 @@ func TestUserHandler_Register(t *testing.T) {
 	})
 
 	t.Run("email already taken returns 409", func(t *testing.T) {
-		h, mockRepo, _ := newTestHandler(t)
+		h, _, mockRepo, _ := newTestHandler(t)
 
 		mockRepo.EXPECT().CreateUser(gomock.Any(), gomock.Any()).Return(repository.User{}, &pgconn.PgError{Code: "23505"})
 
